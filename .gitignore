@@ -30,3 +30,8 @@ bin/
 gen/
 .externalNativeBuild/
 .navigation/
+
+# Google OAuth / Service account JSONs - never commit
+client_secret_*.json
+service_account*.json
+*.gserviceaccount.com

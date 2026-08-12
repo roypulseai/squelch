@@ -8,11 +8,11 @@ plugins {
 }
 
 android {
-    namespace = "com.squelch.p2p"
+    namespace = "com.squelch.app"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.squelch.p2p"
+        applicationId = "com.squelch.app"
         minSdk = 26
         targetSdk = 36
         versionCode = 2

@@ -1,4 +1,4 @@
-package com.squelch.p2p
+package com.squelch.app
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity

@@ -1,10 +1,10 @@
-# Squelch P2P — Build Status
+# Squelch — Build Status
 
 > Living document. Updated at every milestone. Each section ends with the
 > commit hash (or pending) and an exit-criterion.
 >
 > Last updated: **M1 — first green APK** (`app/build/outputs/apk/debug/app-debug.apk`, 36.4 MiB)
-> Tooling: JDK 21 Temurin · Gradle 8.14.3 · AGP 8.9.1 · Kotlin 2.1.20 · compileSdk 36 / targetSdk 36 / minSdk 26 · package `com.squelch.p2p`.
+> Tooling: JDK 21 Temurin · Gradle 8.14.3 · AGP 8.9.1 · Kotlin 2.1.20 · compileSdk 36 / targetSdk 36 / minSdk 26 · app id `com.squelch.app`.
 
 ## Product shape
 
@@ -41,7 +41,7 @@ Phone lost → user installs on the new phone → same Google account → enters
 - **Lost Google account or one-time-password reset**: 24-word mnemonic acts
   as out-of-band backup; exportable in-app via Settings.
 
-## Modules under `com.squelch.p2p/`
+## Modules under `com.squelch.app/`
 
 | Module | Role |
 |--------|------|
@@ -144,15 +144,15 @@ until they're filled in.
 | # | Commit | Title | Status |
 |---|--------|-------|--------|
 | M0 | `cfabef1` | **v1 archived**: move v1 sources to `_archive/v1/`, swap root spec for v2 | ✅ pushed 2026-08-12 |
-| M1 | pending | **v2 scaffold**: gradle + Drive scopes + Google Sign-In deps + stub `MainActivity` + retro logo | ✅ green APK, not yet committed — 36.4 MiB debug APK in `app/build/outputs/apk/debug/` |
-| M2 | pending | **Google Sign-In wrapper + Drive discovery** (find/create `/squelch/`, vault.enc I/O) | not started |
+| M1 | `23c20f9` | **v2 scaffold**: gradle + Drive scopes + Sign-In deps + stub `MainActivity` + retro logo | ✅ pushed — green APK, 36.4 MiB |
+| M2 | pending | **Google Sign-In wrapper + Drive discovery** (find/create `/squelch/`, vault.enc I/O) | in progress |
 | M3 | pending | **Crypto**: BIP-39, Argon2id, AES-256-GCM | not started |
 | M4 | pending | **SQLCipher Room**: 4 entities + factory + DAO | not started |
 | M5 | pending | **Mesh wire** (carried over from v1) + `AndroidMeshManager` (Nearby P2P_CLUSTER) + foreground service | not started |
 | M6 | pending | **Onboarding UI**: Sign-in → PIN → mnemonic confirm → vault ready | not started |
 | M7 | pending | **Main app UI**: Chats / Contacts / Mesh / Settings | not started |
 | M8 | pending | **iOS scaffold** (MultipeerConnectivity + Info.plist + Package.swift + README) | not started |
-| M9 | pending | **Logo variant pass** — picked colour/wordmark combination, both for app icon and Store icon | not started |
+| M9 | pending | **Logo variant pass** — wordmark + Mac/Play PNG | not started |
 | M10 | pending | **First green assembleDebug + APK in app/build/outputs/apk/debug/** | not started |
 
 ## M1 details (closed)
