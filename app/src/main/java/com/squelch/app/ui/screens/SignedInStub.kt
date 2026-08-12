@@ -34,6 +34,9 @@ import com.squelch.app.ui.OnboardingViewModel
 import com.squelch.app.ui.components.PrimaryButton
 import com.squelch.app.ui.components.StatusCard
 import com.squelch.app.ui.components.monoStyle
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @Composable
 fun SignedInStub(
@@ -43,6 +46,8 @@ fun SignedInStub(
     onSignOut: () -> Unit
 ) {
     val crypto by vm.cryptoTest.collectAsState()
+    val mesh by vm.meshStatus.collectAsState()
+    val peers by vm.meshPeers.collectAsState()
 
     Column(
         modifier = Modifier
@@ -137,6 +142,34 @@ fun SignedInStub(
 
         Spacer(Modifier.height(20.dp))
 
+        StatusCard(title = "OFFLINE MESH (M5)") {
+            val current = mesh
+            val lines = buildList {
+                add("running    : ${if (current.running) "YES" else "no"}")
+                add("linked     : ${current.linkedPeers} peer(s)")
+                if (current.running) add("started    : ${hhmm(current.startedAt)}")
+                current.lastError?.let { add("error      : $it") }
+                if (peers.isNotEmpty()) {
+                    add("---")
+                    peers.values.take(6).forEach { p ->
+                        add("• ${p.displayName.take(14)}  (${p.endpointId.take(6)})")
+                    }
+                }
+            }
+            Text(lines.joinToString("\n"), color = MaterialTheme.colorScheme.onSurface, style = monoStyle(12))
+        }
+
+        Spacer(Modifier.height(8.dp))
+
+        PrimaryButton(
+            label = if (mesh.running) "   STOP MESH   " else "   START MESH   ",
+            enabled = true
+        ) {
+            vm.toggleMesh()
+        }
+
+        Spacer(Modifier.height(20.dp))
+
         StatusCard(title = "WHAT THIS ENABLES") {
             Text(
                 text = "•  identity & contacts encrypted with your PIN + Argon2id\n" +
@@ -155,7 +188,7 @@ fun SignedInStub(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Text(
-                text = "v0.4.0  ·  M3",
+                text = "v0.5.0  ·  M5",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = monoStyle(10)
             )
@@ -213,4 +246,9 @@ private fun cryptoText(crypto: OnboardingViewModel.CryptoTestResult): String = w
         "(full mnemonic NOT shown here on purpose)"
     is OnboardingViewModel.CryptoTestResult.Fail ->
         "ERROR: ${crypto.message}"
+}
+
+private fun hhmm(ms: Long): String {
+    if (ms <= 0) return "—"
+    return SimpleDateFormat("HH:mm:ss", Locale.US).format(Date(ms))
 }

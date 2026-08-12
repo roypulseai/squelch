@@ -9,6 +9,8 @@ import com.squelch.app.auth.AuthViewModel
 import com.squelch.app.crypto.Bip39
 import com.squelch.app.crypto.VaultCipher
 import com.squelch.app.crypto.VaultPayload
+import com.squelch.app.mesh.MeshEngine
+import com.squelch.app.mesh.MeshService
 import com.squelch.app.vault.DriveVaultManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -28,6 +30,10 @@ class OnboardingViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _cryptoTest = MutableStateFlow<CryptoTestResult>(CryptoTestResult.Idle)
     val cryptoTest: StateFlow<CryptoTestResult> = _cryptoTest.asStateFlow()
+
+    private val meshEngine by lazy { MeshEngine(getApplication()) }
+    val meshStatus get() = meshEngine.status
+    val meshPeers get() = meshEngine.peers
 
     /** Pass-through to the underlying auth view model. */
     fun signInIntent() = authVm.signInIntent()
@@ -75,10 +81,22 @@ class OnboardingViewModel(app: Application) : AndroidViewModel(app) {
         data class Fail(val message: String) : CryptoTestResult()
     }
 
-    /** Run a full BIP-39 + Argon2id + AES-GCM roundtrip on-device.
-     *  Generate a 24-word mnemonic, build a VaultPayload, encrypt with
-     *  the test PIN "123456" against a synthetic UID, decrypt, verify. */
-    fun runCryptoRoundtrip(testPin: String = "123456", googleUid: String = "test-uid-roypulseai") {
+    /** Toggle the offline mesh engine + foreground service. */
+    fun toggleMesh() {
+        if (meshStatus.value.running) {
+            meshEngine.stop()
+            MeshService.stop(getApplication())
+        } else {
+            meshEngine.start()
+            MeshService.start(getApplication())
+        }
+    }
+
+    /** Run a BIP-39 + Argon2id + AES-GCM roundtrip on-device. */
+    fun runCryptoRoundtrip(
+        testPin: String = "123456",
+        googleUid: String = "test-uid-roypulseai"
+    ) {
         viewModelScope.launch {
             _cryptoTest.value = CryptoTestResult.Running
             try {
@@ -99,7 +117,9 @@ class OnboardingViewModel(app: Application) : AndroidViewModel(app) {
                     fpid = fingerprint
                 )
             } catch (e: Exception) {
-                _cryptoTest.value = CryptoTestResult.Fail(e.message ?: e::class.java.simpleName)
+                _cryptoTest.value = CryptoTestResult.Fail(
+                    e.message ?: e::class.java.simpleName
+                )
             }
         }
     }
