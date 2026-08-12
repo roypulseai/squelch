@@ -19,6 +19,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -28,15 +30,20 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.squelch.app.R
+import com.squelch.app.ui.OnboardingViewModel
+import com.squelch.app.ui.components.PrimaryButton
 import com.squelch.app.ui.components.StatusCard
 import com.squelch.app.ui.components.monoStyle
 
 @Composable
 fun SignedInStub(
+    vm: OnboardingViewModel,
     email: String,
     uid: String,
     onSignOut: () -> Unit
 ) {
+    val crypto by vm.cryptoTest.collectAsState()
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -100,6 +107,36 @@ fun SignedInStub(
 
         Spacer(Modifier.height(20.dp))
 
+        StatusCard(title = "DEV: VAULT CIPHER (M3 roundtrip)") {
+            val current = crypto
+            val color = when (current) {
+                is OnboardingViewModel.CryptoTestResult.Ok ->
+                    if (current.decryptMatch) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.error
+                is OnboardingViewModel.CryptoTestResult.Fail -> MaterialTheme.colorScheme.error
+                else -> MaterialTheme.colorScheme.onSurface
+            }
+            Text(
+                text = cryptoText(current),
+                color = color,
+                style = monoStyle(12)
+            )
+        }
+
+        Spacer(Modifier.height(8.dp))
+
+        PrimaryButton(
+            label = when (crypto) {
+                OnboardingViewModel.CryptoTestResult.Running -> "   WORKING…   "
+                else -> "   TEST VAULT ROUNDTRIP   "
+            },
+            enabled = crypto !is OnboardingViewModel.CryptoTestResult.Running
+        ) {
+            vm.runCryptoRoundtrip()
+        }
+
+        Spacer(Modifier.height(20.dp))
+
         StatusCard(title = "WHAT THIS ENABLES") {
             Text(
                 text = "•  identity & contacts encrypted with your PIN + Argon2id\n" +
@@ -118,7 +155,7 @@ fun SignedInStub(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Text(
-                text = "v0.3.0  ·  M2",
+                text = "v0.4.0  ·  M3",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = monoStyle(10)
             )
@@ -161,4 +198,19 @@ private fun NumberRow(num: String, body: String) {
         )
     }
     Spacer(Modifier.height(8.dp))
+}
+
+private fun cryptoText(crypto: OnboardingViewModel.CryptoTestResult): String = when (crypto) {
+    OnboardingViewModel.CryptoTestResult.Idle ->
+        "tap TEST VAULT ROUNDTRIP to verify\nBIP-39 + Argon2id + AES-256-GCM\nin this build."
+    OnboardingViewModel.CryptoTestResult.Running ->
+        "(running…)"
+    is OnboardingViewModel.CryptoTestResult.Ok ->
+        "mnemonic[:3]   : ${crypto.mnemonic.split(" ").take(3).joinToString(" ")}…\n" +
+        "ciphertext     : ${crypto.ciphertextBytes} bytes\n" +
+        "roundtrip ok   : ${if (crypto.decryptMatch) "YES" else "NO"}\n" +
+        "vault fp       : ${crypto.fpid}\n" +
+        "(full mnemonic NOT shown here on purpose)"
+    is OnboardingViewModel.CryptoTestResult.Fail ->
+        "ERROR: ${crypto.message}"
 }

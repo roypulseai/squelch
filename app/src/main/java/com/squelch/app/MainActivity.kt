@@ -76,6 +76,7 @@ private fun AppRoot(vm: OnboardingViewModel) {
                 }
             }
             SignedInStub(
+                vm = vm,
                 email = s.email,
                 uid = s.googleUid,
                 onSignOut = {
