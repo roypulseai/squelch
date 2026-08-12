@@ -60,4 +60,15 @@ object Bytes {
         secureRandom.nextBytes(out)
         return out
     }
+
+    /** Lexicographic unsigned comparison of two byte arrays (a < b => -1, a == b => 0, a > b => 1). */
+    fun compareUnsigned(a: ByteArray, b: ByteArray): Int {
+        val n = minOf(a.size, b.size)
+        for (i in 0 until n) {
+            val x = a[i].toInt() and 0xff
+            val y = b[i].toInt() and 0xff
+            if (x != y) return if (x < y) -1 else 1
+        }
+        return a.size.compareTo(b.size)
+    }
 }

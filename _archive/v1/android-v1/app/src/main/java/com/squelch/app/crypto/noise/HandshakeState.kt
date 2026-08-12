@@ -12,7 +12,7 @@ enum class HandshakePattern(val messages: List<List<String>>) {
     XX(listOf(listOf("e"), listOf("e", "ee", "s", "es"), listOf("s", "se"))),
     KK(listOf(listOf("e", "es", "ss"), listOf("e", "ee", "se")));
 
-    val name: String get() = when (this) {
+    val patternName: String get() = when (this) {
         XX -> "XX"
         KK -> "KK"
     }

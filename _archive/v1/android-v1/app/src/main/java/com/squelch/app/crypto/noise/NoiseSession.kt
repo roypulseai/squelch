@@ -50,7 +50,7 @@ class NoiseSession private constructor(
 
     val isHandshakeComplete: Boolean get() = handshakeComplete
     val isInitiator: Boolean get() = initiator
-    val patternName: String get() = pattern.name
+    val patternName: String get() = pattern.patternName
 
     /** Write the next handshake message; returns its wire bytes. */
     fun writeHandshake(payload: ByteArray = ByteArray(0)): ByteArray {
