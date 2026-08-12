@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -16,6 +17,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -30,13 +36,18 @@ import com.squelch.app.ui.OnboardingViewModel
 import com.squelch.app.ui.components.PrimaryButton
 import com.squelch.app.ui.components.monoStyle
 
-/**
- * The main UI once the vault is unlocked. M6 finishes with the call-sign
- * + fingerprint display plus Lock Now / Sign Out. M7 layers the chat,
- * contacts, and radar surfaces here.
- */
+/** Post-unlock surface (M7). Lists known peers + last messages,
+ *  lets the user select one, type a message, and sends through
+ *  MeshEngine.sendChat. The active peer is held in local UI state. */
 @Composable
 fun AppShell(vm: OnboardingViewModel) {
+    val meshStatus by vm.meshStatus.collectAsState()
+    val peers by vm.meshPeers.collectAsState()
+    val messages by vm.meshMessages.collectAsState()
+
+    var selectedPeer by remember { mutableStateOf<String?>(null) }
+    var text by remember { mutableStateOf("") }
+
     val fp = VaultSession.kDbOrEmpty().take(4).joinToString("") { "%02x".format(it) }
 
     Column(
@@ -45,90 +56,205 @@ fun AppShell(vm: OnboardingViewModel) {
             .background(MaterialTheme.colorScheme.background)
             .padding(horizontal = 24.dp)
     ) {
-        Spacer(Modifier.height(56.dp))
+        Spacer(Modifier.height(40.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
                 modifier = Modifier
-                    .size(56.dp)
-                    .clip(RoundedCornerShape(12.dp))
+                    .size(48.dp)
+                    .clip(RoundedCornerShape(10.dp))
                     .background(MaterialTheme.colorScheme.surface),
                 contentAlignment = Alignment.Center
             ) {
                 Image(
                     painter = painterResource(R.drawable.ic_launcher_foreground),
                     contentDescription = null,
-                    modifier = Modifier.size(44.dp)
+                    modifier = Modifier.size(36.dp)
                 )
             }
             Spacer(Modifier.width(12.dp))
             Column {
                 Text(
-                    text = "SQUELCH",
+                    "SQUELCH",
                     color = MaterialTheme.colorScheme.primary,
                     style = MaterialTheme.typography.titleLarge.copy(
                         fontFamily = FontFamily.Monospace,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 26.sp,
+                        fontSize = 24.sp,
                         letterSpacing = 4.sp
                     )
                 )
                 Text(
-                    "p2p  -  serverless  -  unlocked",
-                    color = MaterialTheme.colorScheme.primary,
-                    style = monoStyle(11)
+                    "unlocked  -  ${fp}...",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = monoStyle(10)
                 )
             }
         }
 
-        Spacer(Modifier.height(40.dp))
-
+        Spacer(Modifier.height(20.dp))
         Text(
-            "VAULT UNLOCKED",
+            "PEERS (${meshStatus.linkedPeers})",
             color = MaterialTheme.colorScheme.secondary,
-            style = monoStyle(11).copy(fontWeight = FontWeight.Bold)
-        )
-        Spacer(Modifier.height(8.dp))
-        Text(
-            "db fp    : $fp...",
-            color = MaterialTheme.colorScheme.onSurface,
-            style = monoStyle(13)
+            style = monoStyle(10).copy(fontWeight = FontWeight.Bold)
         )
 
-        Spacer(Modifier.height(24.dp))
+        if (peers.isEmpty()) {
+            Text(
+                "> no peers yet\n> tap START MESH then bring two devices close.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = monoStyle(11)
+            )
+        } else {
+            peers.values.take(8).forEach { peer ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(
+                            if (selectedPeer == peer.endpointId) MaterialTheme.colorScheme.surface
+                            else MaterialTheme.colorScheme.background
+                        )
+                        .clickable { selectedPeer = peer.endpointId }
+                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (selectedPeer == peer.endpointId) "*" else " ",
+                        color = MaterialTheme.colorScheme.primary,
+                        style = monoStyle(13)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = peer.displayName.take(20),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        style = monoStyle(12)
+                    )
+                    Spacer(Modifier.weight(1f))
+                    Text(
+                        text = peer.endpointId.take(6),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = monoStyle(10)
+                    )
+                }
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
         Text(
-            "NEXT (in M7)",
+            "MESSAGES (last ${messages.size})",
             color = MaterialTheme.colorScheme.secondary,
-            style = monoStyle(11).copy(fontWeight = FontWeight.Bold)
+            style = monoStyle(10).copy(fontWeight = FontWeight.Bold)
         )
-        Spacer(Modifier.height(8.dp))
-        Text("- Chat surface with the discovered peers", color = MaterialTheme.colorScheme.onSurface, style = monoStyle(11))
-        Text("- Contacts with QR-code exchange", color = MaterialTheme.colorScheme.onSurface, style = monoStyle(11))
-        Text("- Settings: change PIN, lock now, export", color = MaterialTheme.colorScheme.onSurface, style = monoStyle(11))
-
-        Spacer(Modifier.weight(1f))
-
-        PrimaryButton(
-            label = "   LOCK NOW   ",
-            enabled = true,
-            onClick = { vm.lock() }
-        )
-        Spacer(Modifier.height(12.dp))
-        Text(
-            "   SIGN OUT   ",
-            color = MaterialTheme.colorScheme.error,
-            style = monoStyle(12).copy(fontWeight = FontWeight.Bold),
+        Box(
             modifier = Modifier
+                .fillMaxWidth()
+                .height(120.dp)
                 .clip(RoundedCornerShape(4.dp))
                 .background(MaterialTheme.colorScheme.surface)
-                .clickable { vm.signOut() }
-                .padding(horizontal = 10.dp, vertical = 6.dp)
-        )
-        Spacer(Modifier.height(20.dp))
-        Text(
-            "v0.6.0  -  M6 ready",
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            style = monoStyle(10)
-        )
-        Spacer(Modifier.height(20.dp))
+                .padding(8.dp)
+        ) {
+            if (messages.isEmpty()) {
+                Text(
+                    text = "(no messages yet)",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = monoStyle(11)
+                )
+            } else {
+                Column {
+                    messages.takeLast(8).forEach { m ->
+                        Text(
+                            "${m.fromPub.take(6)}: ${m.inner.text}",
+                            color = MaterialTheme.colorScheme.onSurface,
+                            style = monoStyle(11)
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(8.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .height(36.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(MaterialTheme.colorScheme.surface)
+                    .padding(horizontal = 10.dp, vertical = 8.dp)
+            ) {
+                Text(
+                    text = if (text.isEmpty()) "> msg..." else text,
+                    color = if (text.isEmpty()) MaterialTheme.colorScheme.onSurfaceVariant
+                            else MaterialTheme.colorScheme.onSurface,
+                    style = monoStyle(13)
+                )
+            }
+        }
+
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "   TYPE MSG   ",
+                modifier = Modifier
+                    .clickable { text = text + " " }
+                    .background(MaterialTheme.colorScheme.surface)
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                color = MaterialTheme.colorScheme.onSurface,
+                style = monoStyle(11)
+            )
+            Spacer(Modifier.width(6.dp))
+            Text(
+                "   SEND   ",
+                modifier = Modifier
+                    .clickable {
+                        val peerId = selectedPeer
+                        if (text.isNotBlank() && peerId != null) {
+                            vm.sendToPeerEndpoint(peerId, text.trim())
+                            text = ""
+                        }
+                    }
+                    .background(MaterialTheme.colorScheme.primary)
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                color = MaterialTheme.colorScheme.onPrimary,
+                style = monoStyle(11).copy(fontWeight = FontWeight.Bold)
+            )
+            Spacer(Modifier.width(6.dp))
+            Text(
+                "   X   ",
+                modifier = Modifier.clickable { text = "" },
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = monoStyle(11)
+            )
+        }
+
+        Spacer(Modifier.weight(1f))
+        Row(modifier = Modifier.fillMaxWidth()) {
+            Text(
+                "   TOGGLE MESH   ",
+                modifier = Modifier
+                    .clickable { vm.toggleMesh() }
+                    .background(MaterialTheme.colorScheme.primary)
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                color = MaterialTheme.colorScheme.onPrimary,
+                style = monoStyle(11).copy(fontWeight = FontWeight.Bold)
+            )
+            Spacer(Modifier.width(6.dp))
+            Text(
+                "   LOCK   ",
+                modifier = Modifier
+                    .clickable { vm.lock() }
+                    .background(MaterialTheme.colorScheme.surface)
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                color = MaterialTheme.colorScheme.error,
+                style = monoStyle(11).copy(fontWeight = FontWeight.Bold)
+            )
+            Spacer(Modifier.weight(1f))
+            Text(
+                "v0.7.0",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = monoStyle(9)
+            )
+        }
+        Spacer(Modifier.height(16.dp))
     }
 }

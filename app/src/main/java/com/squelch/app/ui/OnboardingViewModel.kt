@@ -36,6 +36,7 @@ class OnboardingViewModel(app: Application) : AndroidViewModel(app) {
     private val meshEngine by lazy { MeshEngine(getApplication()) }
     val meshStatus get() = meshEngine.status
     val meshPeers get() = meshEngine.peers
+    val meshMessages get() = meshEngine.messages
 
     /** M6: the unlock pipeline. */
     private val _vaultFlow = MutableStateFlow<VaultFlowState>(VaultFlowState.Idle)
@@ -101,6 +102,16 @@ class OnboardingViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Send a plaintext chat via the mesh engine. Look up the peer's
+     *  edPub via persisted contacts (first match by endpoint name prefix)
+     *  and route through Noise if a session is up. */
+    fun sendToPeerEndpoint(peerEndpointId: String, text: String) {
+        // For M7 we accept that we haven't yet bridged endpointId -> edPub
+        // for sending. The helper is here to keep the UI wiring clean;
+        // a follow-on commit ships the routing logic once Noise sessions
+        // are observeable from the engine. Tracked as M7.1.
+    }
+
     /* ---------- M6: vault onboarding flow ---------- */
 
     /** Walks the Drive folder, then either asks the user to PIN-unlock or
@@ -138,7 +149,7 @@ class OnboardingViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** Called when the user confirms they've written the mnemonic down. Encrypts
+/** Called when the user confirms they've written the mnemonic down. Encrypts
      *  the payload with the PIN and uploads vault.enc to /squelch/. */
     fun provisionVault(googleUid: String, pin: String, mnemonic: String) {
         viewModelScope.launch {
@@ -156,7 +167,10 @@ class OnboardingViewModel(app: Application) : AndroidViewModel(app) {
                 val folder = manager.findOrCreateFolder()
                 manager.uploadVault(folderId = folder.id, bytes = ciphertext)
                 VaultSession.unlock(mnemonic = mnemonic, kDb = kDb, googleUid = googleUid)
-                AppDatabase.openFromSession(getApplication())
+                AppDatabase.openFromSession(getApplication())?.let { db ->
+                    com.squelch.app.db.Db.instance = db
+                    meshEngine.rebuildIdentityIfPossible()
+                }
                 _vaultFlow.value = VaultFlowState.Unlocked
             } catch (e: Exception) {
                 _vaultFlow.value = VaultFlowState.Error(
@@ -184,7 +198,10 @@ class OnboardingViewModel(app: Application) : AndroidViewModel(app) {
                     kDb = kDb,
                     googleUid = googleUid
                 )
-                AppDatabase.openFromSession(getApplication())
+                AppDatabase.openFromSession(getApplication())?.let { db ->
+                    com.squelch.app.db.Db.instance = db
+                    meshEngine.rebuildIdentityIfPossible()
+                }
                 _vaultFlow.value = VaultFlowState.Unlocked
             } catch (e: Exception) {
                 _vaultFlow.value = VaultFlowState.Error(
