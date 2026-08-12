@@ -72,12 +72,9 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.navigation:navigation-compose:2.9.0")
 
-    // Auth: Google Sign-In (no Firebase).
+    // Auth: Google Sign-In. Drive is called via raw REST using a Bearer token
+// obtained through GoogleAuthUtil, so the v3 client library is not needed.
     implementation("com.google.android.gms:play-services-auth:21.0.0")
-
-    // Google Drive REST API (v2 -> v3 client library). Used directly, no Firebase.
-    implementation("com.google.apis:google-api-services-drive:v3-rev20230822-2.0.0")
-    implementation("com.google.api-client:google-api-client-android:2.2.0")
 
     // Google Nearby Connections for the offline mesh (spec section 3.3).
     implementation("com.google.android.gms:play-services-nearby:19.3.0")
