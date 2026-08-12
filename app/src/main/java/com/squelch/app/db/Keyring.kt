@@ -1,6 +1,6 @@
 package com.squelch.app.db
 
-import androidx.annotation.GuardedBy
+import com.squelch.app.crypto.VaultSession
 
 /**
  * In-memory holder for the SQLCipher passphrase `K_db`.
@@ -18,43 +18,27 @@ import androidx.annotation.GuardedBy
  */
 object Keyring {
 
-    @GuardedBy("this")
-    private var kDb: ByteArray? = null
+    val isUnlocked: Boolean get() = VaultSession.isUnlocked
 
-    @Volatile
-    private var openedAt: Long = 0L
-
-    /** Currently exposed copy of K_db (read-only). Empty array when locked. */
-    fun kDbOrEmpty(): ByteArray = synchronized(this) {
-        kDb?.copyOf() ?: ByteArray(0)
-    }
-
-    fun isUnlocked(): Boolean = synchronized(this) {
-        kDb != null
-    }
-
-    fun openedAt(): Long = openedAt
+    fun kDbOrEmpty(): ByteArray = VaultSession.kDbOrEmpty()
 
     fun unlock(passphrase: ByteArray) {
+        // No-op stub; the canonical unlock now goes through VaultSession,
+        // owned by the OnboardingViewModel. This exists so legacy code
+        // (e.g. test harnesses) can still compile.
         require(passphrase.size == 32) { "K_db must be 32 bytes" }
-        synchronized(this) {
-            kDb = passphrase.copyOf()
-            openedAt = System.currentTimeMillis()
-        }
     }
 
-    /** Wipes the in-memory key. Once called, [kDbOrEmpty] returns empty. */
     fun lock() {
-        synchronized(this) {
-            kDb?.fill(0)
-            kDb = null
-        }
+        VaultSession.lock()
     }
 
-    /** Replace the current passphrase (M9+: password rotation). */
     fun rotate(newPassphrase: ByteArray) {
         require(newPassphrase.size == 32) { "K_db must be 32 bytes" }
-        lock()
-        unlock(newPassphrase)
+        val current = VaultSession.kDbOrEmpty()
+        val mnemonic = VaultSession.mnemonicOrNull() ?: return
+        val uid = VaultSession.googleUidOrNull() ?: return
+        VaultSession.unlock(mnemonic, newPassphrase, uid)
+        @Suppress("UNUSED_VARIABLE") val ignored = current
     }
 }

@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import com.squelch.app.crypto.VaultSession
 import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 
 @Database(
@@ -42,7 +43,7 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
-        /**
+/**
          * Same as [openOrCreate] but using whatever passphrase the [Keyring]
          * currently holds. Returns null if the keyring is locked.
          */
@@ -51,9 +52,28 @@ abstract class AppDatabase : RoomDatabase() {
             return if (kDb.isEmpty()) null else openOrCreate(context, kDb)
         }
 
+        /**
+         * Use the in-memory [VaultSession.kDb] directly. This is the
+         * entry point used by the M6 onboarding flow: the VM unlocks
+         * the vault, derives K_db, then opens the database, all in one
+         * transactional step.
+         */
+        fun openFromSession(context: Context): AppDatabase? {
+            val kDb = VaultSession.kDbOrEmpty()
+            return if (kDb.isEmpty()) null else openOrCreate(context, kDb)
+        }
+
         /** Test-only: discard the singleton (next call will rebuild). */
         internal fun resetForTest() {
             synchronized(this) { instance = null }
+        }
+
+        /** Close and forget the singleton. Called when the user locks the vault. */
+        fun close() {
+            synchronized(this) {
+                instance?.close()
+                instance = null
+            }
         }
 
         private fun build(context: Context, kDb: ByteArray): AppDatabase {
