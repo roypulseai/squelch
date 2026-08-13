@@ -3,6 +3,10 @@
 
     <!-- v0.5: Permissions for offline mesh (Nearby Connections via BLE + WiFi Direct) -->
 
+    <!-- QR-code contact exchange (M-online). CameraX needs CAMERA. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+
     <!-- BLE -->
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />

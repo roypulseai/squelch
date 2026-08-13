@@ -131,9 +131,19 @@ dependencies {
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.10.2")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-guava:1.10.2")
 
     // WebSocket client for the online relay transport (M-online).
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+
+    // QR encoding / decoding (ZXing core - no Android deps, small).
+    implementation("com.google.zxing:core:3.5.3")
+
+    // CameraX for the live QR scan (M-online).
+    val cameraxVersion = "1.4.0"
+    implementation("androidx.camera:camera-camera2:$cameraxVersion")
+    implementation("androidx.camera:camera-lifecycle:$cameraxVersion")
+    implementation("androidx.camera:camera-view:$cameraxVersion")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     implementation("androidx.compose.ui:ui-tooling-preview")

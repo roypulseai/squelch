@@ -45,19 +45,47 @@ fun AppShell(vm: OnboardingViewModel) {
     val peers by vm.meshPeers.collectAsState()
     val messages by vm.meshMessages.collectAsState()
     val relay by vm.relayStatus.collectAsState()
+    val restorable by vm.restorable.collectAsState()
 
-    var showSettings by remember { mutableStateOf(false) }
+    var route by remember { mutableStateOf(AppRoute.Main) }
 
-    if (showSettings) {
-        SettingsScreen(vm = vm, onBack = { showSettings = false })
-        return
+    when (route) {
+        AppRoute.Main -> AppShellMain(
+            vm = vm,
+            relay = relay,
+            meshStatus = meshStatus,
+            peers = peers,
+            messages = messages,
+            restorable = restorable,
+            onSettings = { route = AppRoute.Settings },
+            onMyQr = { route = AppRoute.MyQr },
+            onAddContact = { route = AppRoute.AddContact }
+        )
+        AppRoute.Settings -> SettingsScreen(vm = vm, onBack = { route = AppRoute.Main })
+        AppRoute.MyQr -> MyQrScreen(onBack = { route = AppRoute.Main })
+        AppRoute.AddContact -> AddContactScreen(onBack = { route = AppRoute.Main })
     }
+}
 
+private enum class AppRoute { Main, Settings, MyQr, AddContact }
+
+@Composable
+private fun AppShellMain(
+    vm: OnboardingViewModel,
+    relay: com.squelch.app.mesh.online.RelayTransport.RelayStatus,
+    meshStatus: com.squelch.app.mesh.MeshEngine.MeshStatus,
+    peers: Map<String, com.squelch.app.mesh.MeshEngine.MeshPeer>,
+    messages: List<com.squelch.app.mesh.MeshEngine.SignedMessage>,
+    restorable: OnboardingViewModel.RestorableContacts?,
+    onSettings: () -> Unit,
+    onMyQr: () -> Unit,
+    onAddContact: () -> Unit
+) {
+    var showSettings by remember { mutableStateOf(false) }
     var selectedPeer by remember { mutableStateOf<String?>(null) }
     var text by remember { mutableStateOf("") }
 
     val fp = VaultSession.kDbOrEmpty().take(4).joinToString("") { "%02x".format(it) }
-    val restorable by vm.restorable.collectAsState()
 
     Column(
         modifier = Modifier
@@ -313,9 +341,9 @@ fun AppShell(vm: OnboardingViewModel) {
         Spacer(Modifier.weight(1f))
         Row(modifier = Modifier.fillMaxWidth()) {
             Text(
-                "   TOGGLE MESH   ",
+                "   MY QR   ",
                 modifier = Modifier
-                    .clickable { vm.toggleMesh() }
+                    .clickable { onMyQr() }
                     .background(MaterialTheme.colorScheme.primary)
                     .padding(horizontal = 10.dp, vertical = 8.dp),
                 color = MaterialTheme.colorScheme.onPrimary,
@@ -323,9 +351,29 @@ fun AppShell(vm: OnboardingViewModel) {
             )
             Spacer(Modifier.width(6.dp))
             Text(
-                "   SETTINGS   ",
+                "   ADD   ",
                 modifier = Modifier
-                    .clickable { showSettings = true }
+                    .clickable { onAddContact() }
+                    .background(MaterialTheme.colorScheme.surface)
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                color = MaterialTheme.colorScheme.primary,
+                style = monoStyle(11).copy(fontWeight = FontWeight.Bold)
+            )
+            Spacer(Modifier.width(6.dp))
+            Text(
+                "   MESH   ",
+                modifier = Modifier
+                    .clickable { vm.toggleMesh() }
+                    .background(MaterialTheme.colorScheme.surface)
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                color = MaterialTheme.colorScheme.primary,
+                style = monoStyle(11).copy(fontWeight = FontWeight.Bold)
+            )
+            Spacer(Modifier.width(6.dp))
+            Text(
+                "   CFG   ",
+                modifier = Modifier
+                    .clickable { onSettings() }
                     .background(MaterialTheme.colorScheme.surface)
                     .padding(horizontal = 10.dp, vertical = 8.dp),
                 color = MaterialTheme.colorScheme.primary,
