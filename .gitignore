@@ -41,3 +41,8 @@ service_account*.json
 keystore/*.jks
 *.jks
 *.keystore
+
+# Stray client_secret JSONs sometimes get downloaded into the parent
+# dir by PowerShell when running OAuth tooling. Ignore at the project
+# root as well.
+/client_secret_*.json
