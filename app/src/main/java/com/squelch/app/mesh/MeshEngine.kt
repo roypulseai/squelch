@@ -6,6 +6,7 @@ import com.squelch.app.crypto.VaultSession
 import com.squelch.app.crypto.AesGcm
 import com.squelch.app.crypto.noise.Hkdf
 import com.squelch.app.db.Db
+import com.squelch.app.mesh.online.RelayTransport
 import com.squelch.app.util.Bytes
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -29,6 +30,13 @@ import kotlinx.coroutines.launch
 class MeshEngine(context: Context) {
 
     private val manager = AndroidMeshManager(context)
+
+    private val relay = RelayTransport(context,
+        identity = { identity },
+        relayUrl = RelayTransport.DEFAULT_RELAY_URL)
+
+    private val _relayStatus = MutableStateFlow(relay.status.value)
+    val relayStatus get() = relay.status
 
     private val _status = MutableStateFlow(MeshStatus())
     val status: StateFlow<MeshStatus> = _status.asStateFlow()
@@ -68,14 +76,34 @@ class MeshEngine(context: Context) {
             lastError = null,
             startedAt = System.currentTimeMillis()
         )
+        // Online relay comes up separately via startRelay(signed).
+    }
+
+    /** Bring up the online relay transport. Idempotent; safe to call
+     *  after the user is signed in and the vault is unlocked. */
+    fun startRelay(signed: com.squelch.app.auth.AuthState.SignedIn) {
+        relay.start(signed) { kind, payload -> handleInboundFrame(kind, payload) }
     }
 
     fun stop() {
         if (!_status.value.running) return
         manager.stop()
+        relay.stop()
         _status.value = _status.value.copy(running = false)
         _peers.value = emptyMap()
         sessions.clear()
+    }
+
+    /** Handle a single inbound frame regardless of which transport
+     *  delivered it. Called from the Nearby listener and from the
+     *  relay's WebSocket callback. */
+    private fun handleInboundFrame(kind: Byte, payload: ByteArray) {
+        // Hand off to the same routing the Nearby listener uses.
+        when (kind) {
+            KIND_HELLO -> handleHello("relay", payload)
+            KIND_HANDSHAKE -> handleHandshake("relay", payload)
+            KIND_DATA -> handleData("relay", payload)
+        }
     }
 
     /** Compose an OuterMessage + encrypt with [peerEd]'s Noise session
@@ -95,6 +123,7 @@ class MeshEngine(context: Context) {
         )
         manager.broadcast(KIND_DATA, packet.encode())
         scope.launch { persistOutgoing(peerEd, msg, packet) }
+        relay.send(KIND_DATA, packet.encode())
     }
 
     fun sendRoom(room: ByteArray, text: String) {

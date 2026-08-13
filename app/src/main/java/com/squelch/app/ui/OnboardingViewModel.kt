@@ -37,6 +37,7 @@ class OnboardingViewModel(app: Application) : AndroidViewModel(app) {
     val meshStatus get() = meshEngine.status
     val meshPeers get() = meshEngine.peers
     val meshMessages get() = meshEngine.messages
+    val relayStatus get() = meshEngine.relayStatus
 
     /** M6: the unlock pipeline. */
     private val _vaultFlow = MutableStateFlow<VaultFlowState>(VaultFlowState.Idle)
@@ -91,7 +92,9 @@ class OnboardingViewModel(app: Application) : AndroidViewModel(app) {
         data class Fail(val message: String) : CryptoTestResult()
     }
 
-    /** Toggle the offline mesh engine + foreground service. */
+    /** Toggle the offline mesh engine + foreground service. The relay
+ *  transport piggybacks on the same Google Sign-In account so the user
+ *  doesn't get a second auth prompt. */
     fun toggleMesh() {
         if (meshStatus.value.running) {
             meshEngine.stop()
@@ -99,6 +102,8 @@ class OnboardingViewModel(app: Application) : AndroidViewModel(app) {
         } else {
             meshEngine.start()
             MeshService.start(getApplication())
+            // Bring up the relay alongside the local mesh.
+            (auth.value as? AuthState.SignedIn)?.let { meshEngine.startRelay(it) }
         }
     }
 
@@ -203,6 +208,11 @@ class OnboardingViewModel(app: Application) : AndroidViewModel(app) {
                     meshEngine.rebuildIdentityIfPossible()
                 }
                 _vaultFlow.value = VaultFlowState.Unlocked
+                if (meshStatus.value.running) {
+                    (authVm.state.value as? AuthState.SignedIn)?.let {
+                        meshEngine.startRelay(it)
+                    }
+                }
             } catch (e: Exception) {
                 _vaultFlow.value = VaultFlowState.Error(
                     message = (e.message ?: "decryption failed").let {

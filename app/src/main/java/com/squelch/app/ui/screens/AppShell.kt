@@ -44,6 +44,7 @@ fun AppShell(vm: OnboardingViewModel) {
     val meshStatus by vm.meshStatus.collectAsState()
     val peers by vm.meshPeers.collectAsState()
     val messages by vm.meshMessages.collectAsState()
+    val relay by vm.relayStatus.collectAsState()
 
     var selectedPeer by remember { mutableStateOf<String?>(null) }
     var text by remember { mutableStateOf("") }
@@ -92,6 +93,29 @@ fun AppShell(vm: OnboardingViewModel) {
         }
 
         Spacer(Modifier.height(20.dp))
+        Text(
+            "ONLINE RELAY",
+            color = MaterialTheme.colorScheme.secondary,
+            style = monoStyle(10).copy(fontWeight = FontWeight.Bold)
+        )
+        Text(
+            text = "url   : ${relay.url}",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = monoStyle(10)
+        )
+        Text(
+            text = "state : " + when {
+                relay.connected -> "CONNECTED"
+                relay.connecting -> "connecting…"
+                relay.error != null -> "error: ${relay.error}"
+                else -> "off"
+            },
+            color = when {
+                relay.connected -> MaterialTheme.colorScheme.primary
+                else -> MaterialTheme.colorScheme.onSurfaceVariant
+            },
+            style = monoStyle(10)
+        )
         Text(
             "PEERS (${meshStatus.linkedPeers})",
             color = MaterialTheme.colorScheme.secondary,
