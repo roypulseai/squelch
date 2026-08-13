@@ -46,6 +46,13 @@ fun AppShell(vm: OnboardingViewModel) {
     val messages by vm.meshMessages.collectAsState()
     val relay by vm.relayStatus.collectAsState()
 
+    var showSettings by remember { mutableStateOf(false) }
+
+    if (showSettings) {
+        SettingsScreen(vm = vm, onBack = { showSettings = false })
+        return
+    }
+
     var selectedPeer by remember { mutableStateOf<String?>(null) }
     var text by remember { mutableStateOf("") }
 
@@ -264,6 +271,16 @@ fun AppShell(vm: OnboardingViewModel) {
             )
             Spacer(Modifier.width(6.dp))
             Text(
+                "   SETTINGS   ",
+                modifier = Modifier
+                    .clickable { showSettings = true }
+                    .background(MaterialTheme.colorScheme.surface)
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                color = MaterialTheme.colorScheme.primary,
+                style = monoStyle(11).copy(fontWeight = FontWeight.Bold)
+            )
+            Spacer(Modifier.width(6.dp))
+            Text(
                 "   LOCK   ",
                 modifier = Modifier
                     .clickable { vm.lock() }
@@ -274,7 +291,7 @@ fun AppShell(vm: OnboardingViewModel) {
             )
             Spacer(Modifier.weight(1f))
             Text(
-                "v0.7.0",
+                "v0.10.0",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = monoStyle(9)
             )

@@ -3,8 +3,10 @@
 > Living document. Updated at every milestone. Each section ends with the
 > commit hash (or pending) and an exit-criterion.
 >
-> Last updated: **M1 — first green APK** (`app/build/outputs/apk/debug/app-debug.apk`, 36.4 MiB)
-> Tooling: JDK 21 Temurin · Gradle 8.14.3 · AGP 8.9.1 · Kotlin 2.1.20 · compileSdk 36 / targetSdk 36 / minSdk 26 · app id `com.squelch.app`.
+> Last updated: **M10 + M-online shipped**. APK in
+> `app/build/outputs/apk/debug/app-debug.apk`, 38.5 MiB.
+> Tooling: JDK 21 Temurin · Gradle 8.14.3 · AGP 8.9.1 · Kotlin 2.1.20 ·
+> compileSdk 36 / targetSdk 36 / minSdk 26 · app id `com.squelch.app`.
 
 ## Product shape
 
@@ -143,17 +145,20 @@ until they're filled in.
 
 | # | Commit | Title | Status |
 |---|--------|-------|--------|
-| M0 | `cfabef1` | **v1 archived**: move v1 sources to `_archive/v1/`, swap root spec for v2 | ✅ pushed 2026-08-12 |
-| M1 | `23c20f9` | **v2 scaffold**: gradle + Drive scopes + Sign-In deps + stub `MainActivity` + retro logo | ✅ pushed — green APK, 36.4 MiB |
-| M2 | pending | **Google Sign-In wrapper + Drive discovery** (find/create `/squelch/`, vault.enc I/O) | in progress |
-| M3 | pending | **Crypto**: BIP-39, Argon2id, AES-256-GCM | not started |
-| M4 | pending | **SQLCipher Room**: 4 entities + factory + DAO | not started |
-| M5 | pending | **Mesh wire** (carried over from v1) + `AndroidMeshManager` (Nearby P2P_CLUSTER) + foreground service | not started |
-| M6 | pending | **Onboarding UI**: Sign-in → PIN → mnemonic confirm → vault ready | not started |
-| M7 | pending | **Main app UI**: Chats / Contacts / Mesh / Settings | not started |
-| M8 | pending | **iOS scaffold** (MultipeerConnectivity + Info.plist + Package.swift + README) | not started |
-| M9 | pending | **Logo variant pass** — wordmark + Mac/Play PNG | not started |
-| M10 | pending | **First green assembleDebug + APK in app/build/outputs/apk/debug/** | not started |
+| M0 | `cfabef1` | v1 archived: move v1 sources to `_archive/v1/`, swap root spec for v2 | ✅ pushed |
+| M1 | `23c20f9` | v2 scaffold: gradle + Drive scopes + Sign-In deps + stub `MainActivity` + retro logo | ✅ pushed |
+| M1 cleanup | `5e8ab27` | rename package com.squelch.app, register OAuth client id, app label 'Squelch' | ✅ pushed |
+| M2 | `4448d8b` | Google Sign-In + Drive vault folder (REST, no Firebase) | ✅ pushed |
+| M2 polish | `c653cf4` | in-app logo + shared Components.kt | ✅ pushed |
+| M3 | `d75cec2` | BIP-39 + Argon2id + AES-256-GCM + on-device round-trip | ✅ pushed |
+| M4 | `dc94a37` | SQLCipher-backed Room (3 entities + DAOs + Keyring) | ✅ pushed |
+| M5 | `43f57e4` | offline mesh via Nearby Connections + foreground service | ✅ pushed |
+| M6 | `6e88998` | PIN + mnemonic backup + vault unlock flow | ✅ pushed |
+| M7 | `93ced3e` | chat surfaces + wire format + Noise XX sessions + payload routing | ✅ pushed |
+| M8 | `97a2c46` | iOS source-only scaffold (MultipeerConnectivity + Swift Package) | ✅ pushed |
+| M9 | `ce5f343` | CRT splash + marketing icon SVG + render script | ✅ pushed |
+| M-online | `a112f5c` | libp2p-style online relay (WebSocket) + Settings + protocol spec | ✅ pushed |
+| M10 | pending | AppShell -> Settings navigation + final APK + BUILD_STATUS update | in progress |
 
 ## M1 details (closed)
 
