@@ -38,6 +38,7 @@ import com.squelch.app.ui.screens.MnemonicBackupScreen
 import com.squelch.app.ui.screens.PinEntryScreen
 import com.squelch.app.ui.screens.SignedInStub
 import com.squelch.app.ui.screens.SignInScreen
+import com.squelch.app.ui.screens.SplashScreen
 
 class MainActivity : ComponentActivity() {
 
@@ -57,6 +58,13 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 private fun AppRoot(vm: OnboardingViewModel) {
+    var showSplash by remember { mutableStateOf(true) }
+
+    if (showSplash) {
+        SplashScreen(onTimeout = { showSplash = false })
+        return
+    }
+
     val auth by vm.auth.collectAsState()
     val vault by vm.vaultFlow.collectAsState()
 
