@@ -23,6 +23,7 @@ data class InnerMessage(
         const val KIND_GAME_MOVE: Byte = 0x04
         const val KIND_ROOM_JOIN: Byte = 0x05
         const val KIND_ROOM_LEAVE: Byte = 0x06
+        const val KIND_DELETE: Byte = 0x07
 
         fun chat(timestamp: Long, msgId: ByteArray, text: String): InnerMessage =
             InnerMessage(KIND_CHAT, timestamp, msgId, text.toByteArray(Charsets.UTF_8))

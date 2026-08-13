@@ -8,12 +8,13 @@ import com.squelch.app.crypto.noise.Hkdf
 import com.squelch.app.db.Db
 import com.squelch.app.mesh.online.RelayTransport
 import com.squelch.app.util.Bytes
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import com.squelch.app.util.toHex
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 /**
@@ -51,6 +52,8 @@ class MeshEngine(context: Context) {
 
     private var identity: Identity? = null
     private val sessions = java.util.concurrent.ConcurrentHashMap<String, SessionManager.SessionState>()
+
+    private val storeForward = StoreAndForward()
 
     /** When the vault gets unlocked we begin handshakes with every
      *  already-connected peer. */
@@ -109,11 +112,21 @@ class MeshEngine(context: Context) {
     /** Compose an OuterMessage + encrypt with [peerEd]'s Noise session
      *  + sign packet + broadcast via AndroidMeshManager. */
     fun sendChat(peerEd: ByteArray, text: String) {
-        val id = identity ?: return
+        val id = identity ?: run {
+            _status.value = _status.value.copy(lastError = "identity not initialised (vault locked?)")
+            return
+        }
         val session = openOrInitiateSession(peerEd)
+        if (!session.established) {
+            // Trusted-only: refuse to send until the Noise session is up.
+            _status.value = _status.value.copy(
+                lastError = "peer not authenticated yet; wait for handshake to complete"
+            )
+            return
+        }
         val msg = InnerMessage.chat(System.currentTimeMillis(),
             Bytes.randomId(java.security.SecureRandom()), text)
-        val payload = if (session.established) session.encrypt(msg.encode()) else msg.encode()
+        val payload = session.encrypt(msg.encode())
         val packet = MeshPacket.sign(
             msgId = msg.msgId,
             ttl = 6,
@@ -121,9 +134,50 @@ class MeshEngine(context: Context) {
             senderEdPub = id.edPub,
             payload = payload
         )
-        manager.broadcast(KIND_DATA, packet.encode())
-        scope.launch { persistOutgoing(peerEd, msg, packet) }
-        relay.send(KIND_DATA, packet.encode())
+        val encoded = packet.encode()
+        val isLinkUp = peers.value.values.any { it.endpointId == peerEd.toHex() } ||
+            sessions.values.any { it.peerEd.contentEquals(peerEd) }
+        if (isLinkUp) {
+            manager.broadcast(KIND_DATA, encoded)
+            relay.send(KIND_DATA, encoded)
+            scope.launch { persistOutgoing(peerEd, msg, packet, DeliveryState.SENT) }
+        } else {
+            // Peer is offline: stash in store-and-forward, mark as QUEUED.
+            storeForward.enqueue(peerEd, KIND_DATA, encoded)
+            scope.launch {
+                persistOutgoing(peerEd, msg, packet, DeliveryState.QUEUED)
+            }
+            _status.value = _status.value.copy(
+                lastError = null,
+                linkedPeers = _peers.value.size
+            )
+        }
+    }
+
+    /** Send a delete-for-everyone control frame. Local delete happens
+     *  immediately in the caller; this only marks the message so peers
+     *  drop their copy too. */
+    fun broadcastDelete(peerEd: ByteArray, msgId: ByteArray) {
+        val id = identity ?: return
+        val session = sessions[Bytes.hex(peerEd)] ?: return
+        if (!session.established) return
+        val inner = InnerMessage(
+            kind = InnerMessage.KIND_DELETE,
+            timestamp = System.currentTimeMillis(),
+            msgId = Bytes.randomId(java.security.SecureRandom()),
+            body = msgId
+        )
+        val payload = session.encrypt(inner.encode())
+        val packet = MeshPacket.sign(
+            msgId = inner.msgId,
+            ttl = 6,
+            senderEdSeed = id.edSeed,
+            senderEdPub = id.edPub,
+            payload = payload
+        )
+        val encoded = packet.encode()
+        manager.broadcast(KIND_DATA, encoded)
+        relay.send(KIND_DATA, encoded)
     }
 
     fun sendRoom(room: ByteArray, text: String) {
@@ -179,9 +233,31 @@ class MeshEngine(context: Context) {
                 put(endpointId, MeshPeer(endpointId, info.endpointName, System.currentTimeMillis()))
             }
             publish()
-            // Initialise handshake with the new peer (initiator role).
-            identity?.let { _ ->
-                // peer xPub is unknown until HELLO; defer to handleHello.
+            // Flush any queued messages for any peer we now have a link to.
+            // Map endpointId -> peerEd: cheap since we only iterate the
+            // queue set; we re-derive peer edPub by sniffing the recipient
+            // header of the queued packet.
+            scope.launch {
+                identity?.let { _ ->
+                    val known = sessions.keys
+                    for (peerHex in known.toList()) {
+                        val peerEd = Bytes.unhex(peerHex)
+                        val queued = storeForward.take(peerEd)
+                        if (queued.isEmpty()) continue
+                        for (q in queued) {
+                            // Re-broadcast over both transports.
+                            manager.broadcast(KIND_DATA, q.encoded)
+                            relay.send(KIND_DATA, q.encoded)
+                            // Mark any matching local pending messages as
+                            // SENT (best-effort; we don't have the original
+                            // inner here, so we just update the delivery
+                            // column on rows whose msgId is unknown — we
+                            // can't link a queued packet to a MessageEntity
+                            // without a msgId field on the queue. v0.11.1
+                            // will add that linkage.)
+                        }
+                    }
+                }
             }
         }
 
@@ -319,6 +395,18 @@ class MeshEngine(context: Context) {
     }
 
     private suspend fun persistIncoming(senderPk: ByteArray, msg: InnerMessage, packet: MeshPacket) {
+        // ACK on a real chat (not on the ACK frame itself, not on DELETE).
+        if (msg.kind == InnerMessage.KIND_CHAT || msg.kind == InnerMessage.KIND_ROOM_MSG) {
+            sendAck(senderPk, msg.msgId)
+        }
+        // DROP for everyone: when a peer tells us they deleted a message,
+        // we delete our local copy too.
+        if (msg.kind == InnerMessage.KIND_DELETE) {
+            if (Db.isOpen()) {
+                Db.requireDb().messages().delete(Bytes.hex(msg.body))
+            }
+            return
+        }
         _messages.value = _messages.value + SignedMessage(
             fromPub = Bytes.hex(packet.senderPk),
             inner = msg,
@@ -334,13 +422,41 @@ class MeshEngine(context: Context) {
                     timestamp = msg.timestamp,
                     direction = 0,
                     delivery = 3,
-                    kind = 0
+                    kind = if (msg.kind == InnerMessage.KIND_ROOM_MSG) 1 else 0
                 )
             )
         }
     }
 
-    private suspend fun persistOutgoing(peerEd: ByteArray, msg: InnerMessage, packet: MeshPacket) {
+    private fun sendAck(peerEd: ByteArray, originalMsgId: ByteArray) {
+        val id = identity ?: return
+        val session = sessions[Bytes.hex(peerEd)] ?: return
+        if (!session.established) return
+        val ack = InnerMessage.ack(originalMsgId)
+        val payload = session.encrypt(ack.encode())
+        val packet = MeshPacket.sign(
+            msgId = ack.msgId,
+            ttl = 6,
+            senderEdSeed = id.edSeed,
+            senderEdPub = id.edPub,
+            payload = payload
+        )
+        manager.broadcast(KIND_DATA, packet.encode())
+        relay.send(KIND_DATA, packet.encode())
+    }
+
+    /** Locally delete a message. Returns the row count removed. */
+    suspend fun deleteMessage(msgIdHex: String): Int {
+        if (!Db.isOpen()) return 0
+        return Db.requireDb().messages().delete(msgIdHex)
+    }
+
+    private suspend fun persistOutgoing(
+        peerEd: ByteArray,
+        msg: InnerMessage,
+        packet: MeshPacket,
+        delivery: Int = 1
+    ) {
         _messages.value = _messages.value + SignedMessage(
             fromPub = Bytes.hex(peerEd),
             inner = msg,
@@ -355,7 +471,7 @@ class MeshEngine(context: Context) {
                     body = msg.text,
                     timestamp = msg.timestamp,
                     direction = 1,
-                    delivery = 1,
+                    delivery = delivery,
                     kind = 0
                 )
             )
@@ -373,6 +489,16 @@ class MeshEngine(context: Context) {
         val lastError: String? = null
     )
 
+    /** Mirror of MessageDao's DeliveryState values. Kept inline because
+     *  the constant belongs in the engine flow rather than the
+     *  persistence layer. */
+    object DeliveryState {
+        const val SENDING = 0
+        const val SENT = 1
+        const val QUEUED = 2
+        const val DELIVERED = 3
+    }
+
     data class MeshPeer(
         val endpointId: String,
         val displayName: String,
@@ -382,7 +508,8 @@ class MeshEngine(context: Context) {
     data class SignedMessage(
         val fromPub: String,
         val inner: InnerMessage,
-        val timestamp: String
+        val timestamp: String,
+        val delivery: Int = DeliveryState.SENT
     )
 
     companion object {

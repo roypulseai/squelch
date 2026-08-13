@@ -35,6 +35,7 @@ import com.squelch.app.crypto.VaultSession
 import com.squelch.app.ui.OnboardingViewModel
 import com.squelch.app.ui.components.PrimaryButton
 import com.squelch.app.ui.components.monoStyle
+import com.squelch.app.util.toHex
 
 /** Post-unlock surface (M7). Lists known peers + last messages,
  *  lets the user select one, type a message, and sends through
@@ -81,6 +82,7 @@ private fun AppShellMain(
     onMyQr: () -> Unit,
     onAddContact: () -> Unit
 ) {
+    val lastError by vm.lastError.collectAsState()
     var showSettings by remember { mutableStateOf(false) }
     var selectedPeer by remember { mutableStateOf<String?>(null) }
     var text by remember { mutableStateOf("") }
@@ -94,6 +96,43 @@ private fun AppShellMain(
             .padding(horizontal = 24.dp)
     ) {
         Spacer(Modifier.height(40.dp))
+
+        if (lastError != null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(MaterialTheme.colorScheme.error)
+                    .padding(10.dp)
+            ) {
+                androidx.compose.foundation.layout.Column {
+                    Text(
+                        "VAULT ERROR",
+                        color = MaterialTheme.colorScheme.onError,
+                        style = monoStyle(10).copy(fontWeight = FontWeight.Bold)
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        lastError!!,
+                        color = MaterialTheme.colorScheme.onError,
+                        style = monoStyle(11)
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "   DISMISS   ",
+                        color = MaterialTheme.colorScheme.onError,
+                        style = monoStyle(11).copy(fontWeight = FontWeight.Bold),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(MaterialTheme.colorScheme.error)
+                            .clickable { vm.clearLastError() }
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+        }
+
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
                 modifier = Modifier
@@ -273,10 +312,32 @@ private fun AppShellMain(
             } else {
                 Column {
                     messages.takeLast(8).forEach { m ->
+                        val delivery = m.delivery
+                        val glyph = when (delivery) {
+                            0 -> "?"
+                            1 -> ">"
+                            2 -> "~"
+                            3 -> "<"
+                            else -> "?"
+                        }
                         Text(
-                            "${m.fromPub.take(6)}: ${m.inner.text}",
-                            color = MaterialTheme.colorScheme.onSurface,
-                            style = monoStyle(11)
+                            text = "$glyph ${m.fromPub.take(6)}: ${m.inner.text}",
+                            color = when (delivery) {
+                                3 -> MaterialTheme.colorScheme.primary
+                                2 -> MaterialTheme.colorScheme.secondary
+                                else -> MaterialTheme.colorScheme.onSurface
+                            },
+                            style = monoStyle(11),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    // Long-press behavior on Compose: the
+                                    // single click is a soft delete. (A
+                                    // proper long-press API needs
+                                    // interactionSource + collectIsPressed-
+                                    // AsState, deferred to v0.11.2.)
+                                    vm.deleteMessage(m.inner.msgId.toHex())
+                                }
                         )
                     }
                 }

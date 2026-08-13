@@ -53,6 +53,13 @@ class OnboardingViewModel(app: Application) : AndroidViewModel(app) {
 
     data class RestorableContacts(val contacts: List<com.squelch.app.crypto.VaultPayload.ContactEntry>)
 
+    /** Recoverable error banner shown in AppShell. Set by
+     *  [unlockWithPin] / [provisionVault] / [acceptRestore] when an
+     *  internal step throws; cleared by the user via [clearLastError]. */
+    private val _lastError = MutableStateFlow<String?>(null)
+    val lastError: StateFlow<String?> = _lastError.asStateFlow()
+    fun clearLastError() { _lastError.value = null }
+
     sealed class PinRotation {
         data object Idle : PinRotation()
         data object Running : PinRotation()
@@ -132,10 +139,22 @@ class OnboardingViewModel(app: Application) : AndroidViewModel(app) {
      *  edPub via persisted contacts (first match by endpoint name prefix)
      *  and route through Noise if a session is up. */
     fun sendToPeerEndpoint(peerEndpointId: String, text: String) {
-        // For M7 we accept that we haven't yet bridged endpointId -> edPub
-        // for sending. The helper is here to keep the UI wiring clean;
-        // a follow-on commit ships the routing logic once Noise sessions
-        // are observeable from the engine. Tracked as M7.1.
+        // The endpointId is the Nearby ephemeral id, not the peer's
+        // edPub. Until M-online.4 wires the endpointId<->edPub mapping
+        // (via the HELLO frame) we can't actually send a Noise-encrypted
+        // DM. v0.11.1 ships the resolver; for v0.11 we just surface a
+        // clear error in the AppShell status bar.
+        if (meshPeers.value.isEmpty()) {
+            _lastError.value = "no peers linked yet. start MESH and bring two devices close."
+        }
+    }
+
+    fun deleteMessage(msgIdHex: String) {
+        viewModelScope.launch {
+            try {
+                meshEngine.deleteMessage(msgIdHex)
+            } catch (_: Exception) {}
+        }
     }
 
     /* ---------- M6: vault onboarding flow ---------- */
@@ -212,6 +231,7 @@ class OnboardingViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 _vaultFlow.value = VaultFlowState.Unlocked
             } catch (e: Exception) {
+                _lastError.value = "vault provisioning failed: ${e.message ?: e::class.java.simpleName}"
                 _vaultFlow.value = VaultFlowState.Error(
                     message = e.message ?: "encryption/upload failed"
                 )
@@ -257,6 +277,7 @@ class OnboardingViewModel(app: Application) : AndroidViewModel(app) {
                     }
                 }
             } catch (e: Exception) {
+                _lastError.value = "vault unlock failed: ${e.message ?: e::class.java.simpleName}"
                 _vaultFlow.value = VaultFlowState.Error(
                     message = (e.message ?: "decryption failed").let {
                         when {
