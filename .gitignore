@@ -35,3 +35,9 @@ gen/
 client_secret_*.json
 service_account*.json
 *.gserviceaccount.com
+
+# Release keystores - the public repo ships the example + setup
+# script; the real .jks stays out of git.
+keystore/*.jks
+*.jks
+*.keystore

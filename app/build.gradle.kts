@@ -1,5 +1,8 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
+import java.util.Properties
+import java.io.FileInputStream
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -22,14 +25,48 @@ android {
     }
 
     signingConfigs {
-        // Replace with your keystore once you have one. For now debug builds use the
-        // auto-generated debug.keystore, which is fine for development.
+        // Release: load from local.properties. Default to the debug
+        // signing config so `assembleRelease` still builds if you
+        // haven't run tools/setup-release-keystore.sh yet (the resulting
+        // APK won't be Play-uploadable; check the setup script).
+        val keystoreProps = Properties().apply {
+            val f = rootProject.file("local.properties")
+            if (f.exists()) load(FileInputStream(f))
+        }
+        val keystoreFile = keystoreProps.getProperty(
+            "squelch.keystore.file", "keystore/squelch.jks"
+        )
+        val storePass = keystoreProps.getProperty(
+            "squelch.keystore.storepass", ""
+        )
+        val keyPass = keystoreProps.getProperty(
+            "squelch.keystore.keypass", ""
+        )
+        val alias = keystoreProps.getProperty(
+            "squelch.keystore.alias", "squelch"
+        )
+
+        create("release") {
+            if (rootProject.file(keystoreFile).exists() && storePass.isNotEmpty()) {
+                storeFile = rootProject.file(keystoreFile)
+                storePassword = storePass
+                keyAlias = alias
+                keyPassword = keyPass
+            }
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = signingConfigs.findByName("release")
+        }
+        debug {
+            // Same signing identity as release so the OAuth client only
+            // needs ONE SHA-1 registered. Swap back to the default debug
+            // keystore when you create a separate OAuth client for it.
+            signingConfig = signingConfigs.findByName("release")
         }
     }
 
