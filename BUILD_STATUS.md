@@ -3,8 +3,8 @@
 > Living document. Updated at every milestone. Each section ends with the
 > commit hash (or pending) and an exit-criterion.
 >
-> Last updated: **M10 + M-online shipped**. APK in
-> `app/build/outputs/apk/debug/app-debug.apk`, 38.5 MiB.
+> Last updated: **M15 + README + GitHub repo settings shipped**. APK in
+> `app/build/outputs/apk/debug/app-debug.apk`, 42 MiB.
 > Tooling: JDK 21 Temurin · Gradle 8.14.3 · AGP 8.9.1 · Kotlin 2.1.20 ·
 > compileSdk 36 / targetSdk 36 / minSdk 26 · app id `com.squelch.app`.
 
@@ -158,7 +158,12 @@ until they're filled in.
 | M8 | `97a2c46` | iOS source-only scaffold (MultipeerConnectivity + Swift Package) | ✅ pushed |
 | M9 | `ce5f343` | CRT splash + marketing icon SVG + render script | ✅ pushed |
 | M-online | `a112f5c` | libp2p-style online relay (WebSocket) + Settings + protocol spec | ✅ pushed |
-| M10 | pending | AppShell -> Settings navigation + final APK + BUILD_STATUS update | in progress |
+| M11 | `3666abb` | production keystore + signing config + tools (oauth-debug-info, setup-release-keystore, release-build, upload-to-play) | ✅ pushed |
+| M12 | `3bc8aaf` | README.md (user guide) + docs/repo-settings.md (gh cli commands) | ✅ pushed |
+| M13 | `bba22dd` | Change-PIN + Export-Identity flows | ✅ pushed |
+| M14 | `36bc0e6` | Vault-contact restore flow + importer | ✅ pushed |
+| M15 | `52feff7` | QR-code contact exchange (encode + camera scan + ZXing) | ✅ pushed |
+| M10 | `f61f5dd` | Settings entry point + final APK + BUILD_STATUS update | ✅ pushed |
 
 ## M1 details (closed)
 
