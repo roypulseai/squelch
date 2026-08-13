@@ -8,8 +8,10 @@ import com.squelch.app.auth.AuthState
 import com.squelch.app.auth.AuthViewModel
 import com.squelch.app.crypto.Bip39
 import com.squelch.app.crypto.VaultCipher
+import com.squelch.app.crypto.VaultOps
 import com.squelch.app.crypto.VaultPayload
 import com.squelch.app.crypto.VaultSession
+import com.squelch.app.crypto.mnemonicToExportBlob
 import com.squelch.app.db.AppDatabase
 import com.squelch.app.mesh.MeshEngine
 import com.squelch.app.mesh.MeshService
@@ -38,6 +40,17 @@ class OnboardingViewModel(app: Application) : AndroidViewModel(app) {
     val meshPeers get() = meshEngine.peers
     val meshMessages get() = meshEngine.messages
     val relayStatus get() = meshEngine.relayStatus
+
+    /** Status of an in-progress PIN rotation. */
+    private val _pinRotation = MutableStateFlow<PinRotation>(PinRotation.Idle)
+    val pinRotation: StateFlow<PinRotation> = _pinRotation.asStateFlow()
+
+    sealed class PinRotation {
+        data object Idle : PinRotation()
+        data object Running : PinRotation()
+        data class Done(val mnemonic: String) : PinRotation()
+        data class Error(val message: String) : PinRotation()
+    }
 
     /** M6: the unlock pipeline. */
     private val _vaultFlow = MutableStateFlow<VaultFlowState>(VaultFlowState.Idle)
@@ -233,6 +246,74 @@ class OnboardingViewModel(app: Application) : AndroidViewModel(app) {
         VaultSession.lock()
         AppDatabase.close()
         _vaultFlow.value = VaultFlowState.Locked
+    }
+
+    /** Change the user's PIN. Verifies oldPin against the on-Drive vault,
+     *  re-encrypts with newPin, uploads the new blob, swaps K_db in-memory,
+     *  re-opens SQLCipher. */
+    fun rotatePin(oldPin: String, newPin: String) {
+        if (oldPin.length != newPin.length) {
+            _pinRotation.value = PinRotation.Error("length mismatch")
+            return
+        }
+        viewModelScope.launch {
+            val signed = authVm.state.value as? AuthState.SignedIn ?: run {
+                _pinRotation.value = PinRotation.Error("not signed in")
+                return@launch
+            }
+            _pinRotation.value = PinRotation.Running
+            try {
+                val manager = DriveVaultManager(getApplication(), signed)
+                val blob = manager.downloadVault() ?: run {
+                    _pinRotation.value = PinRotation.Error("no vault on Drive")
+                    return@launch
+                }
+                val result = VaultOps.preparePinRotation(
+                    oldPin = oldPin,
+                    newPin = newPin,
+                    googleUid = signed.googleUid,
+                    ciphertextOnDrive = blob
+                )
+                manager.uploadVault(
+                    folderId = manager.findOrCreateFolder().id,
+                    bytes = result.newCiphertext
+                )
+                // Lock + reopen with the new K_db.
+                AppDatabase.close()
+                VaultSession.unlock(
+                    mnemonic = result.newMnemonic,
+                    kDb = result.newKDb,
+                    googleUid = signed.googleUid
+                )
+                AppDatabase.openFromSession(getApplication())?.let { db ->
+                    com.squelch.app.db.Db.instance = db
+                    meshEngine.rebuildIdentityIfPossible()
+                }
+                _pinRotation.value = PinRotation.Done(result.newMnemonic)
+            } catch (e: Exception) {
+                val msg = (e.message ?: "").let {
+                    when {
+                        it.contains("Failed to authenticate") -> "wrong current PIN"
+                        it.contains("BadPaddingException") -> "wrong current PIN"
+                        it.contains("AEADBadTagException") -> "wrong current PIN"
+                        else -> it
+                    }
+                }
+                _pinRotation.value = PinRotation.Error(if (msg.isNotEmpty()) msg else "rotation failed")
+            }
+        }
+    }
+
+    fun clearPinRotationResult() {
+        _pinRotation.value = PinRotation.Idle
+    }
+
+    /** Returns a base64 blob of the 32-byte seed behind the unlocked
+     *  mnemonic. The caller is responsible for clearing the resulting
+     *  String once displayed / copied. Returns null when locked. */
+    fun exportIdentityBase64(): String? {
+        val mn = VaultSession.mnemonicOrNull() ?: return null
+        return mnemonicToExportBlob(mn)
     }
 
     sealed class VaultFlowState {
