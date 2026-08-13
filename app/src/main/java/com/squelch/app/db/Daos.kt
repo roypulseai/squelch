@@ -26,6 +26,12 @@ interface ContactDao {
 
     @Query("SELECT COUNT(*) FROM contacts")
     suspend fun count(): Int
+
+    /** All pubkeys currently in the local contact list. Cheap because
+     *  it's a single-column projection without allocations. Used by the
+     *  vault-contact restore flow. */
+    @Query("SELECT pubkey FROM contacts")
+    suspend fun pubkeys(): List<String>
 }
 
 @Dao

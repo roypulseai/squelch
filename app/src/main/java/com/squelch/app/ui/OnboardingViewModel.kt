@@ -45,6 +45,14 @@ class OnboardingViewModel(app: Application) : AndroidViewModel(app) {
     private val _pinRotation = MutableStateFlow<PinRotation>(PinRotation.Idle)
     val pinRotation: StateFlow<PinRotation> = _pinRotation.asStateFlow()
 
+    /** Restore-on-new-device flow: when the vault decrypts and the local
+     *  contact list is empty BUT the vault carried contacts, we surface
+     *  [RestorableContacts] so the UI can offer to import them. */
+    private val _restorable = MutableStateFlow<RestorableContacts?>(null)
+    val restorable: StateFlow<RestorableContacts?> = _restorable.asStateFlow()
+
+    data class RestorableContacts(val contacts: List<com.squelch.app.crypto.VaultPayload.ContactEntry>)
+
     sealed class PinRotation {
         data object Idle : PinRotation()
         data object Running : PinRotation()
@@ -176,10 +184,11 @@ class OnboardingViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 val kVault = VaultCipher.deriveKVault(pin, googleUid)
                 val kDb = VaultCipher.deriveKDb(kVault)
+                val payload = VaultPayload(mnemonic = mnemonic)
                 val ciphertext = VaultCipher.encryptVault(
                     pin = pin,
                     googleUid = googleUid,
-                    payload = VaultPayload(mnemonic = mnemonic)
+                    payload = payload
                 )
                 val manager = DriveVaultManager(getApplication(), signed)
                 val folder = manager.findOrCreateFolder()
@@ -188,6 +197,18 @@ class OnboardingViewModel(app: Application) : AndroidViewModel(app) {
                 AppDatabase.openFromSession(getApplication())?.let { db ->
                     com.squelch.app.db.Db.instance = db
                     meshEngine.rebuildIdentityIfPossible()
+                    // M14: surface the vault contacts as a restore
+                    // suggestion if the local list is empty. The vault
+                    // payload here is fresh (we just encrypted it) so
+                    // it has zero entries on first install; the suggestion
+                    // flow is therefore a no-op for new accounts.
+                    viewModelScope.launch {
+                        try {
+                            if (db.contacts().count() == 0 && payload.contacts.isNotEmpty()) {
+                                _restorable.value = RestorableContacts(payload.contacts)
+                            }
+                        } catch (_: Exception) {}
+                    }
                 }
                 _vaultFlow.value = VaultFlowState.Unlocked
             } catch (e: Exception) {
@@ -219,6 +240,15 @@ class OnboardingViewModel(app: Application) : AndroidViewModel(app) {
                 AppDatabase.openFromSession(getApplication())?.let { db ->
                     com.squelch.app.db.Db.instance = db
                     meshEngine.rebuildIdentityIfPossible()
+                    // M14: surface the vault contacts as a restore
+                    // suggestion if the local list is empty.
+                    viewModelScope.launch {
+                        try {
+                            if (db.contacts().count() == 0) {
+                                _restorable.value = RestorableContacts(payload.contacts)
+                            }
+                        } catch (_: Exception) {}
+                    }
                 }
                 _vaultFlow.value = VaultFlowState.Unlocked
                 if (meshStatus.value.running) {
@@ -314,6 +344,27 @@ class OnboardingViewModel(app: Application) : AndroidViewModel(app) {
     fun exportIdentityBase64(): String? {
         val mn = VaultSession.mnemonicOrNull() ?: return null
         return mnemonicToExportBlob(mn)
+    }
+
+    /** M14: accept the restore-from-vault suggestion and merge the
+     *  contacts into the SQLCipher DB. Clears the suggestion. */
+    fun acceptRestore() {
+        val r = _restorable.value ?: return
+        val db = com.squelch.app.db.Db.instance ?: return
+        viewModelScope.launch {
+            try {
+                val importer = com.squelch.app.db.VaultContactsImporter()
+                importer.merge(r.contacts, db)
+            } catch (_: Exception) {
+            } finally {
+                _restorable.value = null
+            }
+        }
+    }
+
+    /** M14: dismiss the restore suggestion without importing. */
+    fun dismissRestore() {
+        _restorable.value = null
     }
 
     sealed class VaultFlowState {

@@ -57,6 +57,7 @@ fun AppShell(vm: OnboardingViewModel) {
     var text by remember { mutableStateOf("") }
 
     val fp = VaultSession.kDbOrEmpty().take(4).joinToString("") { "%02x".format(it) }
+    val restorable by vm.restorable.collectAsState()
 
     Column(
         modifier = Modifier
@@ -97,6 +98,57 @@ fun AppShell(vm: OnboardingViewModel) {
                     style = monoStyle(10)
                 )
             }
+        }
+
+        // M14: restore-from-vault suggestion banner.
+        val r = restorable
+        if (r != null && r.contacts.isNotEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(MaterialTheme.colorScheme.surface)
+                    .padding(10.dp)
+            ) {
+                Column {
+                    Text("RESTORE CONTACTS?",
+                        color = MaterialTheme.colorScheme.primary,
+                        style = monoStyle(10).copy(fontWeight = FontWeight.Bold))
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "your vault contains ${r.contacts.size} contact(s).\n" +
+                                "tap RESTORE to copy them to this device.",
+                        color = MaterialTheme.colorScheme.onSurface,
+                        style = monoStyle(11)
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Row {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(MaterialTheme.colorScheme.primary)
+                                .clickable { vm.acceptRestore() }
+                                .padding(horizontal = 10.dp, vertical = 6.dp)
+                        ) {
+                            Text("   RESTORE   ",
+                                color = MaterialTheme.colorScheme.onPrimary,
+                                style = monoStyle(11).copy(fontWeight = FontWeight.Bold))
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(MaterialTheme.colorScheme.surface)
+                                .clickable { vm.dismissRestore() }
+                                .padding(horizontal = 10.dp, vertical = 6.dp)
+                        ) {
+                            Text("   DISMISS   ", color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = monoStyle(11))
+                        }
+                    }
+                }
+            }
+            Spacer(Modifier.height(16.dp))
         }
 
         Spacer(Modifier.height(20.dp))
