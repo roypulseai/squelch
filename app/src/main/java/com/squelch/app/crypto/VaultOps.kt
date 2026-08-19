@@ -9,25 +9,6 @@ object VaultOps {
         val oldCiphertextReplaced: Boolean
     )
 
-    fun preparePinRotation(
-        oldPin: String,
-        newPin: String,
-        googleUid: String,
-        ciphertextOnDrive: ByteArray
-    ): RotationResult {
-        val currentPayload = VaultCipher.decryptVault(oldPin, googleUid, ciphertextOnDrive)
-        val newKVault = VaultCipher.deriveKVault(newPin, googleUid)
-        val newKDb = VaultCipher.deriveKDb(newKVault)
-        val newCiphertext = VaultCipher.encryptVault(newPin, googleUid, currentPayload)
-
-        return RotationResult(
-            newMnemonic = currentPayload.mnemonic,
-            newKDb = newKDb,
-            newCiphertext = newCiphertext,
-            oldCiphertextReplaced = true
-        )
-    }
-
     fun mergeContacts(
         existing: List<VaultPayload.ContactEntry>,
         add: List<VaultPayload.ContactEntry>
@@ -36,8 +17,6 @@ object VaultOps {
         for (c in add) byKey[c.edPub] = c
         return byKey.values.toList()
     }
-
-    class WrongPinException(cause: Throwable) : RuntimeException("wrong PIN", cause)
 }
 
 fun mnemonicToExportBlob(mnemonic: String): String {

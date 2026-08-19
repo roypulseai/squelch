@@ -145,8 +145,14 @@ dependencies {
     // JSON
     implementation("org.json:json:20231013")
 
+    // Fragment (needed for FragmentActivity + BiometricPrompt)
+    implementation("androidx.fragment:fragment-ktx:1.8.6")
+
     // Splash Screen
     implementation("androidx.core:core-splashscreen:1.0.1")
+
+    // Biometric
+    implementation("androidx.biometric:biometric:1.2.0-alpha05")
 
     // Testing
     testImplementation("junit:junit:4.13.2")

@@ -2,6 +2,8 @@ package com.squelch.app.di
 
 import android.content.Context
 import com.squelch.app.auth.AuthRepository
+import com.squelch.app.auth.BiometricManager
+import com.squelch.app.auth.BiometricVaultManager
 import com.squelch.app.auth.GoogleSignInManager
 import com.squelch.app.data.remote.DriveVaultManager
 import com.squelch.app.data.repository.VaultRepository
@@ -36,11 +38,25 @@ object AppModule {
 
     @Provides
     @Singleton
+    fun provideBiometricManager(@ApplicationContext context: Context): BiometricManager {
+        return BiometricManager(context)
+    }
+
+    @Provides
+    @Singleton
+    fun provideBiometricVaultManager(@ApplicationContext context: Context): BiometricVaultManager {
+        return BiometricVaultManager(context)
+    }
+
+    @Provides
+    @Singleton
     fun provideVaultRepository(
         @ApplicationContext context: Context,
         authRepository: AuthRepository,
-        driveVaultManager: DriveVaultManager
+        driveVaultManager: DriveVaultManager,
+        biometricManager: BiometricManager,
+        biometricVaultManager: BiometricVaultManager
     ): VaultRepository {
-        return VaultRepository(context, authRepository, driveVaultManager)
+        return VaultRepository(context, authRepository, driveVaultManager, biometricManager, biometricVaultManager)
     }
 }

@@ -11,7 +11,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import kotlinx.coroutines.Dispatchers
+import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -35,10 +35,12 @@ import com.squelch.app.ui.screens.contacts.AddContactScreen
 import com.squelch.app.ui.screens.contacts.ContactsScreen
 import com.squelch.app.ui.screens.contacts.MyQrScreen
 import com.squelch.app.ui.screens.mesh.RadarScreen
+import com.squelch.app.ui.screens.onboarding.BiometricGateScreen
 import com.squelch.app.ui.screens.onboarding.MnemonicBackupScreen
-import com.squelch.app.ui.screens.onboarding.PinEntryScreen
+import com.squelch.app.ui.screens.onboarding.MnemonicRecoveryScreen
 import com.squelch.app.ui.screens.onboarding.SignInScreen
 import com.squelch.app.ui.screens.settings.SettingsScreen
+import androidx.fragment.app.FragmentActivity
 
 @Composable
 fun AppEntry(
@@ -48,19 +50,23 @@ fun AppEntry(
     val navController = rememberNavController()
     val authState by authRepository.state.collectAsState()
     val vaultState by vaultRepository.state.collectAsState()
+    val activity = LocalContext.current as FragmentActivity
 
     val isSignedIn = authState is AuthState.SignedIn
 
     val startDestination = when {
         !isSignedIn -> Screen.SignIn.route
         vaultState is VaultState.Unlocked -> Screen.Chats.route
-        vaultState is VaultState.Provisioning -> Screen.PinSetup.route
-        vaultState is VaultState.Locked -> Screen.PinUnlock.route
-        vaultState is VaultState.MnemonicBackup -> Screen.MnemonicBackup.createRoute("pending")
+        vaultState is VaultState.Provisioning -> Screen.BiometricSetup.route
+        vaultState is VaultState.BiometricRequired -> Screen.BiometricUnlock.route
+        vaultState is VaultState.MnemonicBackup -> Screen.MnemonicBackup.createRoute(
+            vaultRepository.getPendingMnemonic() ?: ""
+        )
+        vaultState is VaultState.MnemonicRecovery -> Screen.MnemonicRecovery.route
         vaultState is VaultState.Encrypting -> Screen.Chats.route
-        vaultState is VaultState.Decrypting -> Screen.PinUnlock.route
-        vaultState is VaultState.Error -> Screen.PinUnlock.route
-        else -> Screen.PinSetup.route
+        vaultState is VaultState.Decrypting -> Screen.BiometricUnlock.route
+        vaultState is VaultState.Error -> Screen.BiometricUnlock.route
+        else -> Screen.BiometricSetup.route
     }
 
     LaunchedEffect(isSignedIn) {
@@ -81,47 +87,50 @@ fun AppEntry(
                 SignInScreen(
                     authRepository = authRepository,
                     onSignedIn = {
-                        navController.navigate(Screen.PinSetup.route) {
+                        navController.navigate(Screen.BiometricSetup.route) {
                             popUpTo(Screen.SignIn.route) { inclusive = true }
                         }
                     }
                 )
             }
 
-            composable(Screen.PinSetup.route) {
-                PinEntryScreen(
-                    title = "Create PIN",
-                    subtitle = "Set a PIN to protect your vault (4-8 digits)",
-                    confirmMode = true,
+            composable(Screen.BiometricSetup.route) {
+                BiometricGateScreen(
+                    isProvisioning = true,
                     loading = vaultState is VaultState.Encrypting || vaultState is VaultState.MnemonicPending,
                     errorMessage = (vaultState as? VaultState.Error)?.message,
-                    onPinEntered = { pin ->
-                        vaultRepository.generateMnemonic()
-                        navController.navigate(Screen.MnemonicBackup.createRoute(pin)) {
-                            popUpTo(Screen.PinSetup.route) { inclusive = true }
-                        }
-                    }
+                    onAuthenticate = {
+                        vaultRepository.provisionWithBiometric(activity)
+                    },
+                    onUseRecoveryPhrase = null
                 )
             }
 
-            composable(Screen.PinUnlock.route) {
-                PinEntryScreen(
-                    title = "Unlock Vault",
-                    subtitle = "Enter your PIN to unlock",
-                    loading = vaultState is VaultState.Decrypting,
-                    errorMessage = (vaultState as? VaultState.Error)?.message,
-                    onPinEntered = { pin ->
-                        vaultRepository.unlockWithPin(pin)
+            composable(Screen.BiometricUnlock.route) {
+                val vs by vaultRepository.state.collectAsState()
+                BiometricGateScreen(
+                    isProvisioning = false,
+                    loading = vs is VaultState.Decrypting,
+                    errorMessage = (vs as? VaultState.Error)?.message,
+                    onAuthenticate = {
+                        vaultRepository.unlockWithBiometric(activity)
                     },
-                    onMnemonicClicked = null
+                    onUseRecoveryPhrase = {
+                        navController.navigate(Screen.MnemonicRecovery.route)
+                    }
                 )
             }
 
             composable(
                 route = Screen.MnemonicBackup.route,
-                arguments = listOf(navArgument("pin") { type = NavType.StringType })
+                arguments = listOf(navArgument("mnemonic") { type = NavType.StringType })
             ) { backStackEntry ->
-                val pin = backStackEntry.arguments?.getString("pin") ?: ""
+                val mnemonicEncoded = backStackEntry.arguments?.getString("mnemonic") ?: ""
+                val mnemonic = try {
+                    java.net.URLDecoder.decode(mnemonicEncoded, "UTF-8")
+                } catch (e: Exception) {
+                    mnemonicEncoded
+                }
                 val vs by vaultRepository.state.collectAsState()
 
                 when (val state = vs) {
@@ -129,20 +138,20 @@ fun AppEntry(
                         MnemonicBackupScreen(
                             mnemonic = state.mnemonic,
                             onConfirmed = {
-                                vaultRepository.provisionVault(pin = pin, mnemonic = state.mnemonic)
+                                vaultRepository.provisionVault(mnemonic = state.mnemonic)
                             }
                         )
                     }
                     is VaultState.Encrypting -> {
-                        PinEntryScreen(
-                            title = "Encrypting vault...",
-                            subtitle = "Uploading encrypted vault to Google Drive",
+                        BiometricGateScreen(
+                            isProvisioning = true,
                             loading = true,
-                            onPinEntered = { }
+                            onAuthenticate = { }
                         )
                     }
                     is VaultState.Unlocked -> {
                         LaunchedEffect(Unit) {
+                            vaultRepository.setupBiometricCache(activity, mnemonic)
                             navController.navigate(Screen.Chats.route) {
                                 popUpTo(0) { inclusive = true }
                             }
@@ -150,11 +159,25 @@ fun AppEntry(
                     }
                     else -> {
                         MnemonicBackupScreen(
-                            mnemonic = "generating...",
+                            mnemonic = if (mnemonic.isNotEmpty()) mnemonic else "generating...",
                             onConfirmed = { }
                         )
                     }
                 }
+            }
+
+            composable(Screen.MnemonicRecovery.route) {
+                val vs by vaultRepository.state.collectAsState()
+                MnemonicRecoveryScreen(
+                    loading = vs is VaultState.Decrypting,
+                    errorMessage = (vs as? VaultState.Error)?.message,
+                    onMnemonicEntered = { mnemonic ->
+                        vaultRepository.unlockWithMnemonic(mnemonic)
+                    },
+                    onBack = {
+                        navController.popBackStack()
+                    }
+                )
             }
 
             composable(Screen.Chats.route) {
@@ -274,7 +297,7 @@ fun AppEntry(
                     },
                     onLock = {
                         vaultRepository.lock()
-                        navController.navigate(Screen.PinUnlock.route) {
+                        navController.navigate(Screen.BiometricUnlock.route) {
                             popUpTo(0) { inclusive = true }
                         }
                     }
