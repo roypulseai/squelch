@@ -10,8 +10,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -23,8 +28,15 @@ import com.squelch.app.auth.AuthRepository
 import com.squelch.app.auth.AuthState
 import com.squelch.app.data.repository.VaultRepository
 import com.squelch.app.data.repository.VaultRepository.VaultState
+import com.squelch.app.crypto.Identity
+import com.squelch.app.crypto.VaultSession
+import com.squelch.app.qr.QrCodec
+import com.squelch.app.qr.QrContact
+import com.squelch.app.util.toHex
 import com.squelch.app.ui.screens.chats.ChatsScreen
+import com.squelch.app.ui.screens.contacts.AddContactScreen
 import com.squelch.app.ui.screens.contacts.ContactsScreen
+import com.squelch.app.ui.screens.contacts.MyQrScreen
 import com.squelch.app.ui.screens.mesh.RadarScreen
 import com.squelch.app.ui.screens.onboarding.MnemonicBackupScreen
 import com.squelch.app.ui.screens.onboarding.PinEntryScreen
@@ -173,7 +185,59 @@ fun AppEntry(
             }
 
             composable(Screen.Contacts.route) {
-                ContactsScreen()
+                ContactsScreen(
+                    onNavigateToAddContact = { navController.navigate(Screen.AddContact.route) },
+                    onNavigateToMyQr = { navController.navigate(Screen.MyQr.route) }
+                )
+            }
+
+            composable(Screen.AddContact.route) {
+                AddContactScreen(
+                    onBack = { navController.popBackStack() },
+                    onQrScanned = { contact ->
+                        kotlinx.coroutines.MainScope().launch {
+                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                vaultRepository.db?.contacts()?.upsert(
+                                    com.squelch.app.data.local.entity.ContactEntity(
+                                        pubkey = contact.edPub,
+                                        xPub = contact.xPub,
+                                        callsign = contact.callsign,
+                                        displayName = contact.displayName,
+                                        lastSeen = System.currentTimeMillis()
+                                    )
+                                )
+                            }
+                        }
+                        navController.popBackStack()
+                    }
+                )
+            }
+
+            composable(Screen.MyQr.route) {
+                val signed = authRepository.signedIn()
+                val selfContact = remember(signed) {
+                    val mn = VaultSession.mnemonicOrNull()
+                    if (mn != null) {
+                        val identity = Identity.fromMnemonic(mn)
+                        QrContact(
+                            edPub = identity.edPub.toHex(),
+                            xPub = identity.xPub.toHex(),
+                            callsign = signed?.displayName?.take(12) ?: "Unknown",
+                            displayName = signed?.displayName ?: signed?.email ?: ""
+                        )
+                    } else {
+                        QrContact(
+                            edPub = "",
+                            xPub = "",
+                            callsign = "Unknown",
+                            displayName = signed?.email ?: ""
+                        )
+                    }
+                }
+                MyQrScreen(
+                    selfContact = selfContact,
+                    onBack = { navController.popBackStack() }
+                )
             }
 
             composable(Screen.Radar.route) {
