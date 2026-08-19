@@ -12,6 +12,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.fragment.app.FragmentActivity
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -35,12 +37,9 @@ import com.squelch.app.ui.screens.contacts.AddContactScreen
 import com.squelch.app.ui.screens.contacts.ContactsScreen
 import com.squelch.app.ui.screens.contacts.MyQrScreen
 import com.squelch.app.ui.screens.mesh.RadarScreen
-import com.squelch.app.ui.screens.onboarding.BiometricGateScreen
-import com.squelch.app.ui.screens.onboarding.MnemonicBackupScreen
-import com.squelch.app.ui.screens.onboarding.MnemonicRecoveryScreen
 import com.squelch.app.ui.screens.onboarding.SignInScreen
+import com.squelch.app.ui.screens.onboarding.BiometricGateScreen
 import com.squelch.app.ui.screens.settings.SettingsScreen
-import androidx.fragment.app.FragmentActivity
 
 @Composable
 fun AppEntry(
@@ -57,22 +56,28 @@ fun AppEntry(
     val startDestination = when {
         !isSignedIn -> Screen.SignIn.route
         vaultState is VaultState.Unlocked -> Screen.Chats.route
-        vaultState is VaultState.Provisioning -> Screen.BiometricSetup.route
-        vaultState is VaultState.BiometricRequired -> Screen.BiometricUnlock.route
-        vaultState is VaultState.MnemonicBackup -> Screen.MnemonicBackup.createRoute(
-            vaultRepository.getPendingMnemonic() ?: ""
-        )
-        vaultState is VaultState.MnemonicRecovery -> Screen.MnemonicRecovery.route
-        vaultState is VaultState.Encrypting -> Screen.Chats.route
-        vaultState is VaultState.Decrypting -> Screen.BiometricUnlock.route
-        vaultState is VaultState.Error -> Screen.BiometricUnlock.route
-        else -> Screen.BiometricSetup.route
+        vaultState is VaultState.BiometricRequired -> Screen.Unlock.route
+        vaultState is VaultState.Error -> Screen.Unlock.route
+        else -> Screen.Chats.route
     }
 
     LaunchedEffect(isSignedIn) {
         if (isSignedIn && vaultState is VaultState.Idle) {
-            vaultRepository.initDrive()
             vaultRepository.checkVaultState()
+        }
+    }
+
+    LaunchedEffect(vaultState) {
+        when (vaultState) {
+            is VaultState.Unlocked -> {
+                val current = navController.currentDestination?.route
+                if (current == Screen.SignIn.route || current == Screen.Unlock.route) {
+                    navController.navigate(Screen.Chats.route) {
+                        popUpTo(0) { inclusive = true }
+                    }
+                }
+            }
+            else -> {}
         }
     }
 
@@ -87,96 +92,22 @@ fun AppEntry(
                 SignInScreen(
                     authRepository = authRepository,
                     onSignedIn = {
-                        navController.navigate(Screen.BiometricSetup.route) {
+                        navController.navigate(Screen.Chats.route) {
                             popUpTo(Screen.SignIn.route) { inclusive = true }
                         }
                     }
                 )
             }
 
-            composable(Screen.BiometricSetup.route) {
-                BiometricGateScreen(
-                    isProvisioning = true,
-                    loading = vaultState is VaultState.Encrypting || vaultState is VaultState.MnemonicPending,
-                    errorMessage = (vaultState as? VaultState.Error)?.message,
-                    onAuthenticate = {
-                        vaultRepository.provisionWithBiometric(activity)
-                    },
-                    onUseRecoveryPhrase = null
-                )
-            }
-
-            composable(Screen.BiometricUnlock.route) {
+            composable(Screen.Unlock.route) {
                 val vs by vaultRepository.state.collectAsState()
                 BiometricGateScreen(
-                    isProvisioning = false,
-                    loading = vs is VaultState.Decrypting,
+                    loading = vs is VaultState.Loading,
                     errorMessage = (vs as? VaultState.Error)?.message,
                     onAuthenticate = {
                         vaultRepository.unlockWithBiometric(activity)
                     },
-                    onUseRecoveryPhrase = {
-                        navController.navigate(Screen.MnemonicRecovery.route)
-                    }
-                )
-            }
-
-            composable(
-                route = Screen.MnemonicBackup.route,
-                arguments = listOf(navArgument("mnemonic") { type = NavType.StringType })
-            ) { backStackEntry ->
-                val mnemonicEncoded = backStackEntry.arguments?.getString("mnemonic") ?: ""
-                val mnemonic = try {
-                    java.net.URLDecoder.decode(mnemonicEncoded, "UTF-8")
-                } catch (e: Exception) {
-                    mnemonicEncoded
-                }
-                val vs by vaultRepository.state.collectAsState()
-
-                when (val state = vs) {
-                    is VaultState.MnemonicBackup -> {
-                        MnemonicBackupScreen(
-                            mnemonic = state.mnemonic,
-                            onConfirmed = {
-                                vaultRepository.provisionVault(mnemonic = state.mnemonic)
-                            }
-                        )
-                    }
-                    is VaultState.Encrypting -> {
-                        BiometricGateScreen(
-                            isProvisioning = true,
-                            loading = true,
-                            onAuthenticate = { }
-                        )
-                    }
-                    is VaultState.Unlocked -> {
-                        LaunchedEffect(Unit) {
-                            vaultRepository.setupBiometricCache(activity, mnemonic)
-                            navController.navigate(Screen.Chats.route) {
-                                popUpTo(0) { inclusive = true }
-                            }
-                        }
-                    }
-                    else -> {
-                        MnemonicBackupScreen(
-                            mnemonic = if (mnemonic.isNotEmpty()) mnemonic else "generating...",
-                            onConfirmed = { }
-                        )
-                    }
-                }
-            }
-
-            composable(Screen.MnemonicRecovery.route) {
-                val vs by vaultRepository.state.collectAsState()
-                MnemonicRecoveryScreen(
-                    loading = vs is VaultState.Decrypting,
-                    errorMessage = (vs as? VaultState.Error)?.message,
-                    onMnemonicEntered = { mnemonic ->
-                        vaultRepository.unlockWithMnemonic(mnemonic)
-                    },
-                    onBack = {
-                        navController.popBackStack()
-                    }
+                    onUseRecoveryPhrase = null
                 )
             }
 
@@ -258,23 +189,13 @@ fun AppEntry(
             composable(Screen.MyQr.route) {
                 val signed = authRepository.signedIn()
                 val selfContact = remember(signed) {
-                    val mn = VaultSession.mnemonicOrNull()
-                    if (mn != null) {
-                        val identity = Identity.fromMnemonic(mn)
-                        QrContact(
-                            edPub = identity.edPub.toHex(),
-                            xPub = identity.xPub.toHex(),
-                            callsign = signed?.displayName?.take(12) ?: "Unknown",
-                            displayName = signed?.displayName ?: signed?.email ?: ""
-                        )
-                    } else {
-                        QrContact(
-                            edPub = "",
-                            xPub = "",
-                            callsign = "Unknown",
-                            displayName = signed?.email ?: ""
-                        )
-                    }
+                    val uid = VaultSession.googleUidOrNull() ?: ""
+                    QrContact(
+                        edPub = uid,
+                        xPub = "",
+                        callsign = signed?.displayName?.take(12) ?: "Unknown",
+                        displayName = signed?.displayName ?: signed?.email ?: ""
+                    )
                 }
                 MyQrScreen(
                     selfContact = selfContact,
@@ -297,9 +218,15 @@ fun AppEntry(
                     },
                     onLock = {
                         vaultRepository.lock()
-                        navController.navigate(Screen.BiometricUnlock.route) {
+                        navController.navigate(Screen.Unlock.route) {
                             popUpTo(0) { inclusive = true }
                         }
+                    },
+                    onEnableBiometric = {
+                        vaultRepository.enableBiometricLock(activity)
+                    },
+                    onDisableBiometric = {
+                        vaultRepository.disableBiometricLock(activity)
                     }
                 )
             }

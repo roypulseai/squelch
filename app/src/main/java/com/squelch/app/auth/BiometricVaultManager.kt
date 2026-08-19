@@ -3,8 +3,6 @@ package com.squelch.app.auth
 import android.content.Context
 import android.util.Base64
 import android.util.Log
-import android.security.keystore.KeyGenParameterSpec
-import android.security.keystore.KeyProperties
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.security.KeyStore
 import javax.crypto.Cipher
@@ -23,32 +21,39 @@ class BiometricVaultManager @Inject constructor(
         private const val KEYSTORE = "AndroidKeyStore"
         private const val KEY_ALIAS = "squelch_vault_bio_key"
         private const val PREFS = "squelch_biometric_vault"
-        private const val KEY_ENC_MNEMONIC = "enc_mnemonic"
+        private const val KEY_ENC_KDB = "enc_kdb"
         private const val KEY_IV = "enc_iv"
     }
 
     private val keyStore: KeyStore = KeyStore.getInstance(KEYSTORE).apply { load(null) }
     private val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
-    fun hasCachedMnemonic(): Boolean = prefs.contains(KEY_ENC_MNEMONIC)
+    fun isLockEnabled(): Boolean = prefs.getBoolean("lock_enabled", false)
+
+    fun setLockEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean("lock_enabled", enabled).apply()
+    }
+
+    fun hasCachedKey(): Boolean = prefs.contains(KEY_ENC_KDB)
 
     private fun getOrCreateKey(): SecretKey {
         keyStore.getEntry(KEY_ALIAS, null)?.let {
             return (it as KeyStore.SecretKeyEntry).secretKey
         }
-        val spec = KeyGenParameterSpec.Builder(
+        val spec = android.security.keystore.KeyGenParameterSpec.Builder(
             KEY_ALIAS,
-            KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
+            android.security.keystore.KeyProperties.PURPOSE_ENCRYPT or
+                    android.security.keystore.KeyProperties.PURPOSE_DECRYPT
         )
-            .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
-            .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+            .setBlockModes(android.security.keystore.KeyProperties.BLOCK_MODE_GCM)
+            .setEncryptionPaddings(android.security.keystore.KeyProperties.ENCRYPTION_PADDING_NONE)
             .setKeySize(256)
             .setUserAuthenticationRequired(true)
             .setInvalidatedByBiometricEnrollment(true)
             .build()
 
         return KeyGenerator.getInstance(
-            KeyProperties.KEY_ALGORITHM_AES, KEYSTORE
+            android.security.keystore.KeyProperties.KEY_ALGORITHM_AES, KEYSTORE
         ).apply { init(spec) }.generateKey()
     }
 
@@ -69,33 +74,34 @@ class BiometricVaultManager @Inject constructor(
         }
     }
 
-    fun saveEncryptedMnemonic(cipher: Cipher, mnemonic: String) {
+    fun saveEncryptedKey(cipher: Cipher, kDb: ByteArray) {
         try {
-            val encrypted = cipher.doFinal(mnemonic.toByteArray(Charsets.UTF_8))
+            val encrypted = cipher.doFinal(kDb)
             prefs.edit()
-                .putString(KEY_ENC_MNEMONIC, Base64.encodeToString(encrypted, Base64.NO_WRAP))
+                .putString(KEY_ENC_KDB, Base64.encodeToString(encrypted, Base64.NO_WRAP))
                 .putString(KEY_IV, Base64.encodeToString(cipher.iv, Base64.NO_WRAP))
+                .putBoolean("lock_enabled", true)
                 .apply()
-            Log.d(TAG, "Saved encrypted mnemonic locally")
+            Log.d(TAG, "Saved encrypted kDb locally")
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to save mnemonic: ${e.message}", e)
+            Log.e(TAG, "Failed to save kDb: ${e.message}", e)
             throw e
         }
     }
 
-    fun decryptMnemonic(cipher: Cipher): String {
+    fun decryptKey(cipher: Cipher): ByteArray {
         try {
-            val encBase64 = prefs.getString(KEY_ENC_MNEMONIC, null)
-                ?: throw IllegalStateException("No encrypted mnemonic stored")
+            val encBase64 = prefs.getString(KEY_ENC_KDB, null)
+                ?: throw IllegalStateException("No encrypted kDb stored")
             val encrypted = Base64.decode(encBase64, Base64.NO_WRAP)
-            return String(cipher.doFinal(encrypted), Charsets.UTF_8)
+            return cipher.doFinal(encrypted)
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to decrypt mnemonic: ${e.message}", e)
+            Log.e(TAG, "Failed to decrypt kDb: ${e.message}", e)
             throw e
         }
     }
 
-    fun clearLocalMnemonic() {
+    fun clearLocalKey() {
         prefs.edit().clear().apply()
     }
 }

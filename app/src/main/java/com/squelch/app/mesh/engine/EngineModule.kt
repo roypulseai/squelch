@@ -1,8 +1,8 @@
 package com.squelch.app.mesh.engine
 
 import android.content.Context
+import com.squelch.app.auth.AuthRepository
 import com.squelch.app.crypto.Identity
-import com.squelch.app.crypto.VaultSession
 import com.squelch.app.mesh.transport.BleTransport
 import com.squelch.app.mesh.transport.FirestoreTransport
 import com.squelch.app.mesh.transport.Transport
@@ -21,17 +21,14 @@ object EngineModule {
     @Provides
     @Singleton
     fun provideMeshEngine(
-        @ApplicationContext context: Context
+        @ApplicationContext context: Context,
+        authRepository: AuthRepository
     ): MeshEngine? {
-        val mn = VaultSession.mnemonicOrNull() ?: return null
-        val identity = Identity.fromMnemonic(mn)
+        val googleUid = authRepository.signedIn()?.googleUid ?: return null
+        val identity = Identity.fromGoogleUid(googleUid)
 
         val transports = mutableListOf<Transport>()
-
-        // BLE mesh for nearby devices
         transports.add(BleTransport(context))
-
-        // Firestore relay for internet chat
         transports.add(FirestoreTransport(edPubHex = identity.edPub.toHex()))
 
         return MeshEngine(identity = identity, transports = transports)

@@ -6,11 +6,9 @@ import androidx.fragment.app.FragmentActivity
 import com.squelch.app.auth.AuthRepository
 import com.squelch.app.auth.BiometricManager
 import com.squelch.app.auth.BiometricVaultManager
-import com.squelch.app.crypto.Bip39
 import com.squelch.app.crypto.VaultCipher
 import com.squelch.app.crypto.VaultPayload
 import com.squelch.app.crypto.VaultSession
-import com.squelch.app.crypto.mnemonicToExportBlob
 import com.squelch.app.data.local.SquelchDatabase
 import com.squelch.app.data.remote.FirestoreVaultManager
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -20,7 +18,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -38,16 +35,9 @@ class VaultRepository @Inject constructor(
 
     sealed class VaultState {
         data object Idle : VaultState()
-        data object Probing : VaultState()
-        data object Locked : VaultState()
-        data object Provisioning : VaultState()
-        data object MnemonicPending : VaultState()
-        data class MnemonicBackup(val mnemonic: String) : VaultState()
-        data object Encrypting : VaultState()
-        data object Decrypting : VaultState()
+        data object Loading : VaultState()
         data object Unlocked : VaultState()
         data object BiometricRequired : VaultState()
-        data object MnemonicRecovery : VaultState()
         data class Error(val message: String) : VaultState()
     }
 
@@ -55,74 +45,79 @@ class VaultRepository @Inject constructor(
     val state: StateFlow<VaultState> = _state.asStateFlow()
 
     private var database: SquelchDatabase? = null
-    private var pendingMnemonic: String? = null
 
     val db: SquelchDatabase? get() = database
     val isUnlocked: Boolean get() = VaultSession.isUnlocked
 
-    fun initDrive() {
-        // No-op — FirestoreVaultManager doesn't need init
-    }
-
     fun checkVaultState() {
         val signed = authRepository.signedIn() ?: return
-        _state.value = VaultState.Probing
-
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
-                val hasVault = firestoreVaultManager.hasVault(signed.googleUid)
-                _state.value = if (!hasVault) VaultState.Provisioning else VaultState.BiometricRequired
-            } catch (e: Exception) {
-                Log.e(TAG, "checkVaultState failed: ${e.message}", e)
-                _state.value = VaultState.Error(e.message ?: "vault probe failed")
-            }
-        }
-    }
-
-    fun provisionWithBiometric(activity: FragmentActivity) {
-        _state.value = VaultState.MnemonicPending
-        CoroutineScope(Dispatchers.IO).launch {
-            val mnemonic = withContext(Dispatchers.Default) {
-                Bip39.generateMnemonic(context, entropyBytes = 32)
-            }
-            pendingMnemonic = mnemonic
-            _state.value = VaultState.MnemonicBackup(mnemonic = mnemonic)
-        }
-    }
-
-    fun provisionVault(mnemonic: String) {
-        val signed = authRepository.signedIn() ?: return
-        _state.value = VaultState.Encrypting
+        _state.value = VaultState.Loading
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val googleUid = signed.googleUid
-                val kVault = VaultCipher.deriveKVault(mnemonic, googleUid)
-                val kDb = VaultCipher.deriveKDb(kVault)
-                val payload = VaultPayload(mnemonic = mnemonic)
-                val ciphertext = VaultCipher.encryptVault(mnemonic, googleUid, payload)
+                val hasVault = firestoreVaultManager.hasVault(googleUid)
+                val lockEnabled = biometricVaultManager.isLockEnabled()
 
+                if (!hasVault) {
+                    provisionVault(googleUid)
+                } else if (lockEnabled && biometricVaultManager.hasCachedKey()) {
+                    _state.value = VaultState.BiometricRequired
+                } else if (lockEnabled) {
+                    _state.value = VaultState.BiometricRequired
+                } else {
+                    autoUnlock(googleUid)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "checkVaultState failed: ${e.message}", e)
+                _state.value = VaultState.Error(e.message ?: "Failed to load vault")
+            }
+        }
+    }
+
+    private fun provisionVault(googleUid: String) {
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val payload = VaultPayload()
+                val ciphertext = VaultCipher.encryptVault(googleUid, payload)
                 firestoreVaultManager.uploadVault(googleUid, ciphertext)
 
-                VaultSession.unlock(mnemonic = mnemonic, kDb = kDb, googleUid = googleUid)
+                val kDb = VaultCipher.deriveKDb(googleUid)
+                VaultSession.unlock(kDb = kDb, googleUid = googleUid)
                 database = SquelchDatabase.create(context, kDb)
 
                 _state.value = VaultState.Unlocked
             } catch (e: Exception) {
                 Log.e(TAG, "provisionVault failed: ${e.message}", e)
-                _state.value = VaultState.Error(e.message ?: "provisioning failed")
+                _state.value = VaultState.Error("Setup failed: ${e.message}")
+            }
+        }
+    }
+
+    private fun autoUnlock(googleUid: String) {
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val blob = firestoreVaultManager.downloadVault(googleUid)
+                    ?: throw IllegalStateException("Vault not found")
+
+                VaultCipher.decryptVault(googleUid, blob)
+                val kDb = VaultCipher.deriveKDb(googleUid)
+                VaultSession.unlock(kDb = kDb, googleUid = googleUid)
+                database = SquelchDatabase.create(context, kDb)
+
+                _state.value = VaultState.Unlocked
+            } catch (e: Exception) {
+                Log.e(TAG, "autoUnlock failed: ${e.message}", e)
+                _state.value = VaultState.Error("Unlock failed: ${e.message}")
             }
         }
     }
 
     fun unlockWithBiometric(activity: FragmentActivity) {
-        if (!biometricVaultManager.hasCachedMnemonic()) {
-            Log.d(TAG, "No local mnemonic cache, need recovery")
-            _state.value = VaultState.MnemonicRecovery
+        if (!biometricVaultManager.hasCachedKey()) {
+            _state.value = VaultState.Error("No stored key. Restart the app.")
             return
         }
-
-        _state.value = VaultState.Decrypting
 
         try {
             val cipher = biometricVaultManager.getDecryptionCipher()
@@ -130,84 +125,75 @@ class VaultRepository @Inject constructor(
                 activity = activity,
                 cipher = cipher,
                 title = "Unlock Vault",
-                subtitle = "Verify your identity to unlock Squelch",
+                subtitle = "Verify your identity",
                 onSuccess = { result ->
                     val resultCipher = result.cryptoObject?.cipher ?: return@authenticateWithCipher
                     try {
-                        val mnemonic = biometricVaultManager.decryptMnemonic(resultCipher)
-                        decryptAndUnlock(mnemonic)
+                        val kDb = biometricVaultManager.decryptKey(resultCipher)
+                        val googleUid = authRepository.signedIn()?.googleUid ?: return@authenticateWithCipher
+                        VaultSession.unlock(kDb = kDb, googleUid = googleUid)
+                        database = SquelchDatabase.create(context, kDb)
+                        _state.value = VaultState.Unlocked
                     } catch (e: Exception) {
-                        Log.e(TAG, "decrypt mnemonic failed: ${e.message}", e)
-                        _state.value = VaultState.Error("Failed to unlock: ${e.message}")
+                        Log.e(TAG, "decrypt kDb failed: ${e.message}", e)
+                        _state.value = VaultState.Error("Unlock failed: ${e.message}")
                     }
                 },
                 onError = { msg ->
-                    if (msg == "cancelled") {
-                        _state.value = VaultState.BiometricRequired
-                    } else {
+                    if (msg != "cancelled") {
                         _state.value = VaultState.Error(msg)
                     }
                 }
             )
         } catch (e: Exception) {
             Log.e(TAG, "biometric setup failed: ${e.message}", e)
-            _state.value = VaultState.MnemonicRecovery
+            _state.value = VaultState.Error("Biometric not available: ${e.message}")
         }
     }
 
-    fun unlockWithMnemonic(mnemonic: String) {
-        _state.value = VaultState.Decrypting
-        decryptAndUnlock(mnemonic)
-    }
+    fun enableBiometricLock(activity: FragmentActivity) {
+        val kDb = VaultSession.kDbOrEmpty()
+        if (kDb.isEmpty()) return
 
-    private fun decryptAndUnlock(mnemonic: String) {
-        val signed = authRepository.signedIn() ?: return
-
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
-                val googleUid = signed.googleUid
-                val blob = firestoreVaultManager.downloadVault(googleUid)
-                    ?: throw IllegalStateException("no vault found on Firestore")
-
-                val payload = VaultCipher.decryptVault(mnemonic, googleUid, blob)
-                val kVault = VaultCipher.deriveKVault(mnemonic, googleUid)
-                val kDb = VaultCipher.deriveKDb(kVault)
-
-                VaultSession.unlock(mnemonic = payload.mnemonic, kDb = kDb, googleUid = googleUid)
-                database = SquelchDatabase.create(context, kDb)
-
-                _state.value = VaultState.Unlocked
-            } catch (e: Exception) {
-                Log.e(TAG, "decryptAndUnlock failed: ${e.message}", e)
-                val msg = when {
-                    e.message?.contains("AEADBadTagException") == true -> "Incorrect recovery phrase"
-                    e.message?.contains("BadPaddingException") == true -> "Incorrect recovery phrase"
-                    else -> e.message ?: "decryption failed"
-                }
-                _state.value = VaultState.Error(msg)
-            }
-        }
-    }
-
-    fun setupBiometricCache(activity: FragmentActivity, mnemonic: String) {
         try {
             val cipher = biometricVaultManager.getEncryptionCipher()
             biometricManager.authenticateWithCipher(
                 activity = activity,
                 cipher = cipher,
-                title = "Save Recovery Key",
-                subtitle = "Authenticate to save your recovery key on this device",
+                title = "Enable Vault Lock",
+                subtitle = "Authenticate to enable biometric lock",
                 onSuccess = { result ->
                     val resultCipher = result.cryptoObject?.cipher ?: return@authenticateWithCipher
-                    biometricVaultManager.saveEncryptedMnemonic(resultCipher, mnemonic)
-                    Log.d(TAG, "Mnemonic cached with biometric protection")
+                    biometricVaultManager.saveEncryptedKey(resultCipher, kDb)
+                    Log.d(TAG, "Biometric lock enabled")
                 },
                 onError = { msg ->
-                    Log.w(TAG, "Biometric cache skipped: $msg")
+                    Log.w(TAG, "Enable lock cancelled: $msg")
                 }
             )
         } catch (e: Exception) {
-            Log.w(TAG, "setupBiometricCache failed: ${e.message}")
+            Log.e(TAG, "enableBiometricLock failed: ${e.message}")
+        }
+    }
+
+    fun disableBiometricLock(activity: FragmentActivity) {
+        try {
+            val cipher = biometricVaultManager.getDecryptionCipher()
+            biometricManager.authenticateWithCipher(
+                activity = activity,
+                cipher = cipher,
+                title = "Disable Vault Lock",
+                subtitle = "Authenticate to disable biometric lock",
+                onSuccess = {
+                    biometricVaultManager.clearLocalKey()
+                    Log.d(TAG, "Biometric lock disabled")
+                },
+                onError = { msg ->
+                    Log.w(TAG, "Disable lock cancelled: $msg")
+                }
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "disableBiometricLock failed: ${e.message}")
         }
     }
 
@@ -215,28 +201,20 @@ class VaultRepository @Inject constructor(
         VaultSession.lock()
         database?.close()
         database = null
-        _state.value = VaultState.Locked
+        _state.value = VaultState.BiometricRequired
     }
 
     fun signOut() {
         VaultSession.lock()
         database?.close()
         database = null
-        biometricVaultManager.clearLocalMnemonic()
+        biometricVaultManager.clearLocalKey()
         _state.value = VaultState.Idle
-    }
-
-    fun exportIdentity(): String? {
-        val mn = VaultSession.mnemonicOrNull() ?: return null
-        return mnemonicToExportBlob(mn)
     }
 
     fun clearError() {
         if (_state.value is VaultState.Error) {
-            val wasLocked = VaultSession.isUnlocked.not()
-            _state.value = if (wasLocked) VaultState.BiometricRequired else VaultState.Unlocked
+            _state.value = if (VaultSession.isUnlocked) VaultState.Unlocked else VaultState.BiometricRequired
         }
     }
-
-    fun getPendingMnemonic(): String? = pendingMnemonic
 }

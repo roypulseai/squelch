@@ -5,7 +5,6 @@ import org.json.JSONObject
 
 data class VaultPayload(
     val version: Int = 1,
-    val mnemonic: String,
     val contacts: List<ContactEntry> = emptyList(),
     val settings: Settings = Settings()
 ) {
@@ -41,7 +40,6 @@ data class VaultPayload(
             .put("meshPublic", settings.meshPublic)
         val root = JSONObject()
             .put("version", version)
-            .put("mnemonic", mnemonic)
             .put("contacts", contactsJson)
             .put("settings", settingsJson)
         return root.toString()
@@ -73,7 +71,6 @@ data class VaultPayload(
             ) else Settings()
             return VaultPayload(
                 version = root.optInt("version", 1),
-                mnemonic = root.getString("mnemonic"),
                 contacts = contacts,
                 settings = settings
             )

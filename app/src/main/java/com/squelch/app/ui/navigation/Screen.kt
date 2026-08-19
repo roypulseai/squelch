@@ -9,12 +9,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 
 sealed class Screen(val route: String) {
     data object SignIn : Screen("sign_in")
-    data object BiometricSetup : Screen("biometric_setup")
-    data object BiometricUnlock : Screen("biometric_unlock")
-    data object MnemonicBackup : Screen("mnemonic_backup/{mnemonic}") {
-        fun createRoute(mnemonic: String) = "mnemonic_backup/${java.net.URLEncoder.encode(mnemonic, "UTF-8")}"
-    }
-    data object MnemonicRecovery : Screen("mnemonic_recovery")
+    data object Unlock : Screen("unlock")
     data object Chats : Screen("chats")
     data object Conversation : Screen("conversation/{conversationId}/{conversationName}") {
         fun createRoute(conversationId: String, conversationName: String): String =

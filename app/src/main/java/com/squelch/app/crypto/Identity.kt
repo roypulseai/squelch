@@ -2,6 +2,7 @@ package com.squelch.app.crypto
 
 import com.squelch.app.crypto.noise.KeyPair
 import com.squelch.app.util.Bytes
+import java.security.MessageDigest
 
 data class Identity(
     val edSeed: ByteArray,
@@ -22,6 +23,16 @@ data class Identity(
             val edSeed = seed64.copyOfRange(0, 32)
             val xSecret = seed64.copyOfRange(32, 64)
             return Identity(edSeed, xSecret)
+        }
+
+        fun fromGoogleUid(googleUid: String): Identity {
+            val md = MessageDigest.getInstance("SHA-512")
+            val seed64 = md.digest("squelch_identity_v1:$googleUid".toByteArray(Charsets.UTF_8))
+            require(seed64.size >= 64)
+            return Identity(
+                edSeed = seed64.copyOfRange(0, 32),
+                xSecret = seed64.copyOfRange(32, 64)
+            )
         }
 
         fun fromBlob(blob: ByteArray): Identity {
