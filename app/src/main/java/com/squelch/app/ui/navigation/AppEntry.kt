@@ -33,8 +33,10 @@ import com.squelch.app.crypto.VaultSession
 import com.squelch.app.qr.QrCodec
 import com.squelch.app.qr.QrContact
 import com.squelch.app.util.toHex
+import com.squelch.app.ui.screens.chats.ChatViewModel
 import com.squelch.app.ui.screens.chats.ChatsScreen
 import com.squelch.app.ui.screens.chats.ConversationScreen
+import com.squelch.app.ui.screens.chats.NewChatScreen
 import com.squelch.app.ui.screens.contacts.AddContactScreen
 import com.squelch.app.ui.screens.contacts.ContactsScreen
 import com.squelch.app.ui.screens.contacts.MyQrScreen
@@ -184,6 +186,23 @@ fun AppEntry(
                     onNavigateToSettings = { navController.navigate(Screen.Settings.route) },
                     onNavigateToConversation = { id, name ->
                         navController.navigate(Screen.Conversation.createRoute(id, name))
+                    },
+                    onNavigateToNewChat = {
+                        navController.navigate(Screen.NewChat.route)
+                    }
+                )
+            }
+
+            composable(Screen.NewChat.route) {
+                NewChatScreen(
+                    database = vaultRepository.db,
+                    onBack = { navController.popBackStack() },
+                    onContactSelected = { contact ->
+                        val convId = contact.pubkey
+                        val convName = contact.callsign.ifEmpty { contact.displayName }
+                        navController.navigate(Screen.Conversation.createRoute(convId, convName)) {
+                            popUpTo(Screen.NewChat.route) { inclusive = true }
+                        }
                     }
                 )
             }

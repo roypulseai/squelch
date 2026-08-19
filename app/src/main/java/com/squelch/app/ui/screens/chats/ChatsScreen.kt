@@ -37,6 +37,7 @@ import java.util.Locale
 fun ChatsScreen(
     onNavigateToSettings: () -> Unit = {},
     onNavigateToConversation: (id: String, name: String) -> Unit = { _, _ -> },
+    onNavigateToNewChat: () -> Unit = {},
     viewModel: ChatViewModel = androidx.hilt.navigation.compose.hiltViewModel()
 ) {
     val conversations by viewModel.conversations.collectAsState()
@@ -53,7 +54,7 @@ fun ChatsScreen(
         },
         floatingActionButton = {
             FloatingActionButton(
-                onClick = { },
+                onClick = onNavigateToNewChat,
                 containerColor = MaterialTheme.colorScheme.primary
             ) {
                 Icon(Icons.Default.Add, contentDescription = "New Chat")
