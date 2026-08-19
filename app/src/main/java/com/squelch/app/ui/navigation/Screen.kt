@@ -8,7 +8,6 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.ui.graphics.vector.ImageVector
 
 sealed class Screen(val route: String) {
-    data object Splash : Screen("splash")
     data object SignIn : Screen("sign_in")
     data object PinSetup : Screen("pin_setup")
     data object PinUnlock : Screen("pin_unlock")

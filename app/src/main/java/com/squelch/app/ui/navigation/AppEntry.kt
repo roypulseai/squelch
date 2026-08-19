@@ -1,6 +1,5 @@
 package com.squelch.app.ui.navigation
 
-import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -12,13 +11,10 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.hilt.navigation.compose.hiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import androidx.navigation.NavGraph.Companion.findStartDestination
-import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -30,10 +26,8 @@ import com.squelch.app.data.repository.VaultRepository
 import com.squelch.app.data.repository.VaultRepository.VaultState
 import com.squelch.app.crypto.Identity
 import com.squelch.app.crypto.VaultSession
-import com.squelch.app.qr.QrCodec
 import com.squelch.app.qr.QrContact
 import com.squelch.app.util.toHex
-import com.squelch.app.ui.screens.chats.ChatViewModel
 import com.squelch.app.ui.screens.chats.ChatsScreen
 import com.squelch.app.ui.screens.chats.ConversationScreen
 import com.squelch.app.ui.screens.chats.NewChatScreen
@@ -45,7 +39,6 @@ import com.squelch.app.ui.screens.onboarding.MnemonicBackupScreen
 import com.squelch.app.ui.screens.onboarding.PinEntryScreen
 import com.squelch.app.ui.screens.onboarding.SignInScreen
 import com.squelch.app.ui.screens.settings.SettingsScreen
-import com.squelch.app.ui.screens.splash.SplashScreen
 
 @Composable
 fun AppEntry(
@@ -56,23 +49,24 @@ fun AppEntry(
     val authState by authRepository.state.collectAsState()
     val vaultState by vaultRepository.state.collectAsState()
 
+    val isSignedIn = authState is AuthState.SignedIn
+
     val startDestination = when {
-        authState !is AuthState.SignedIn -> Screen.SignIn.route
+        !isSignedIn -> Screen.SignIn.route
         vaultState is VaultState.Unlocked -> Screen.Chats.route
-        vaultState is VaultState.MnemonicPending -> Screen.PinSetup.route
         vaultState is VaultState.Provisioning -> Screen.PinSetup.route
         vaultState is VaultState.Locked -> Screen.PinUnlock.route
         vaultState is VaultState.MnemonicBackup -> Screen.MnemonicBackup.createRoute("pending")
+        vaultState is VaultState.Encrypting -> Screen.Chats.route
+        vaultState is VaultState.Decrypting -> Screen.PinUnlock.route
         vaultState is VaultState.Error -> Screen.PinUnlock.route
-        else -> Screen.Splash.route
+        else -> Screen.PinSetup.route
     }
 
-    LaunchedEffect(authState, vaultState) {
-        when {
-            authState is AuthState.SignedIn && vaultState is VaultState.Idle -> {
-                vaultRepository.initDrive()
-                vaultRepository.checkVaultState()
-            }
+    LaunchedEffect(isSignedIn) {
+        if (isSignedIn && vaultState is VaultState.Idle) {
+            vaultRepository.initDrive()
+            vaultRepository.checkVaultState()
         }
     }
 
@@ -83,26 +77,11 @@ fun AppEntry(
             enterTransition = { fadeIn(tween(200)) },
             exitTransition = { fadeOut(tween(200)) }
         ) {
-            composable(Screen.Splash.route) {
-                SplashScreen(
-                    onTimeout = {
-                        val dest = when {
-                            authState !is AuthState.SignedIn -> Screen.SignIn.route
-                            vaultState is VaultState.Unlocked -> Screen.Chats.route
-                            else -> Screen.PinUnlock.route
-                        }
-                        navController.navigate(dest) {
-                            popUpTo(Screen.Splash.route) { inclusive = true }
-                        }
-                    }
-                )
-            }
-
             composable(Screen.SignIn.route) {
                 SignInScreen(
                     authRepository = authRepository,
                     onSignedIn = {
-                        navController.navigate(Screen.Splash.route) {
+                        navController.navigate(Screen.PinSetup.route) {
                             popUpTo(Screen.SignIn.route) { inclusive = true }
                         }
                     }
@@ -151,9 +130,6 @@ fun AppEntry(
                             mnemonic = state.mnemonic,
                             onConfirmed = {
                                 vaultRepository.provisionVault(pin = pin, mnemonic = state.mnemonic)
-                                navController.navigate(Screen.Chats.route) {
-                                    popUpTo(0) { inclusive = true }
-                                }
                             }
                         )
                     }
