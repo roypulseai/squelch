@@ -4,8 +4,8 @@ import android.content.Context
 import com.squelch.app.auth.AuthRepository
 import com.squelch.app.auth.BiometricManager
 import com.squelch.app.auth.BiometricVaultManager
-import com.squelch.app.auth.GoogleSignInManager
-import com.squelch.app.data.remote.DriveVaultManager
+import com.squelch.app.auth.FirebaseAuthManager
+import com.squelch.app.data.remote.FirestoreVaultManager
 import com.squelch.app.data.repository.VaultRepository
 import dagger.Module
 import dagger.Provides
@@ -20,20 +20,20 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideGoogleSignInManager(@ApplicationContext context: Context): GoogleSignInManager {
-        return GoogleSignInManager(context)
+    fun provideFirebaseAuthManager(@ApplicationContext context: Context): FirebaseAuthManager {
+        return FirebaseAuthManager(context)
     }
 
     @Provides
     @Singleton
-    fun provideAuthRepository(signInManager: GoogleSignInManager): AuthRepository {
-        return AuthRepository(signInManager)
+    fun provideAuthRepository(firebaseAuthManager: FirebaseAuthManager): AuthRepository {
+        return AuthRepository(firebaseAuthManager)
     }
 
     @Provides
     @Singleton
-    fun provideDriveVaultManager(): DriveVaultManager {
-        return DriveVaultManager()
+    fun provideFirestoreVaultManager(): FirestoreVaultManager {
+        return FirestoreVaultManager()
     }
 
     @Provides
@@ -53,10 +53,10 @@ object AppModule {
     fun provideVaultRepository(
         @ApplicationContext context: Context,
         authRepository: AuthRepository,
-        driveVaultManager: DriveVaultManager,
+        firestoreVaultManager: FirestoreVaultManager,
         biometricManager: BiometricManager,
         biometricVaultManager: BiometricVaultManager
     ): VaultRepository {
-        return VaultRepository(context, authRepository, driveVaultManager, biometricManager, biometricVaultManager)
+        return VaultRepository(context, authRepository, firestoreVaultManager, biometricManager, biometricVaultManager)
     }
 }

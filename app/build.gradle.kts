@@ -8,6 +8,7 @@ plugins {
     id("com.google.devtools.ksp")
     id("com.google.dagger.hilt.android")
     id("org.jetbrains.kotlin.kapt")
+    id("com.google.gms.google-services")
 }
 
 android {
@@ -25,16 +26,17 @@ android {
     }
 
     signingConfigs {
+        getByName("debug") {
+            storeFile = file("${rootProject.projectDir}/squelch.jks")
+            storePassword = "squelch123"
+            keyAlias = "squelch"
+            keyPassword = "squelch123"
+        }
         create("release") {
-            val props = file("${rootProject.projectDir}/local.properties")
-            if (props.exists()) {
-                val p = Properties()
-                FileInputStream(props).use { p.load(it) }
-                storeFile = file(p.getProperty("squelch.keystore.file", "keystore/squelch.jks"))
-                storePassword = p.getProperty("squelch.keystore.storepass", "")
-                keyAlias = p.getProperty("squelch.keystore.alias", "squelch")
-                keyPassword = p.getProperty("squelch.keystore.keypass", "")
-            }
+            storeFile = file("${rootProject.projectDir}/squelch.jks")
+            storePassword = "squelch123"
+            keyAlias = "squelch"
+            keyPassword = "squelch123"
         }
     }
 
@@ -112,12 +114,14 @@ dependencies {
     kapt("com.google.dagger:hilt-compiler:2.56.2")
     implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
 
-    // Google Sign-In
+    // Firebase
+    implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
+    implementation("com.google.firebase:firebase-auth-ktx")
+    implementation("com.google.firebase:firebase-firestore-ktx")
+
+    // Google Play Services (needed for Firebase Auth Google sign-in)
     implementation("com.google.android.gms:play-services-auth:21.0.0")
     implementation("com.google.android.gms:play-services-nearby:19.3.0")
-
-    // Drive REST
-    implementation("com.google.apis:google-api-services-drive:v3-rev20230822-2.0.0")
 
     // Crypto
     implementation("net.zetetic:sqlcipher-android:4.5.4@aar")
@@ -141,6 +145,7 @@ dependencies {
 
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.10.2")
 
     // JSON
     implementation("org.json:json:20231013")

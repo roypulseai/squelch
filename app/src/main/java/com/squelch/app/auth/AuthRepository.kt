@@ -9,23 +9,32 @@ import javax.inject.Singleton
 
 @Singleton
 class AuthRepository @Inject constructor(
-    private val signInManager: GoogleSignInManager
+    private val firebaseAuthManager: FirebaseAuthManager
 ) {
     private val _state = MutableStateFlow<AuthState>(AuthState.Idle)
     val state: StateFlow<AuthState> = _state.asStateFlow()
 
-    fun signInIntent(): Intent = signInManager.signInIntent()
+    fun signInIntent(): Intent = firebaseAuthManager.getSignInIntent()
 
     fun onSignInResult(data: Intent?) {
-        _state.value = signInManager.parseSignInResult(data)
+        val result = firebaseAuthManager.parseSignInResult(data)
+        if (result is AuthState.PendingGoogleAuth) {
+            _state.value = AuthState.SigningIn
+        } else {
+            _state.value = result
+        }
+    }
+
+    suspend fun completeFirebaseAuth(idToken: String): AuthState {
+        val result = firebaseAuthManager.firebaseAuthWithGoogle(idToken)
+        _state.value = result
+        return result
     }
 
     fun signOut() {
-        signInManager.signOut()
+        firebaseAuthManager.signOut()
         _state.value = AuthState.Idle
     }
-
-    fun currentState(): AuthState = _state.value
 
     fun signedIn(): AuthState.SignedIn? = _state.value as? AuthState.SignedIn
 }

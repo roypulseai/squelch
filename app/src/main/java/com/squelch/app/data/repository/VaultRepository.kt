@@ -12,7 +12,7 @@ import com.squelch.app.crypto.VaultPayload
 import com.squelch.app.crypto.VaultSession
 import com.squelch.app.crypto.mnemonicToExportBlob
 import com.squelch.app.data.local.SquelchDatabase
-import com.squelch.app.data.remote.DriveVaultManager
+import com.squelch.app.data.remote.FirestoreVaultManager
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -28,7 +28,7 @@ import javax.inject.Singleton
 class VaultRepository @Inject constructor(
     @ApplicationContext private val context: Context,
     private val authRepository: AuthRepository,
-    private val driveVaultManager: DriveVaultManager,
+    private val firestoreVaultManager: FirestoreVaultManager,
     private val biometricManager: BiometricManager,
     private val biometricVaultManager: BiometricVaultManager
 ) {
@@ -61,24 +61,17 @@ class VaultRepository @Inject constructor(
     val isUnlocked: Boolean get() = VaultSession.isUnlocked
 
     fun initDrive() {
-        val signed = authRepository.signedIn() ?: return
-        driveVaultManager.init(signed)
+        // No-op — FirestoreVaultManager doesn't need init
     }
 
     fun checkVaultState() {
         val signed = authRepository.signedIn() ?: return
         _state.value = VaultState.Probing
-        driveVaultManager.init(signed)
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val folder = driveVaultManager.findOrCreateFolder()
-                val existing = driveVaultManager.findVaultFile(folder.id)
-                if (existing == null) {
-                    _state.value = VaultState.Provisioning
-                } else {
-                    _state.value = VaultState.BiometricRequired
-                }
+                val hasVault = firestoreVaultManager.hasVault(signed.googleUid)
+                _state.value = if (!hasVault) VaultState.Provisioning else VaultState.BiometricRequired
             } catch (e: Exception) {
                 Log.e(TAG, "checkVaultState failed: ${e.message}", e)
                 _state.value = VaultState.Error(e.message ?: "vault probe failed")
@@ -109,8 +102,7 @@ class VaultRepository @Inject constructor(
                 val payload = VaultPayload(mnemonic = mnemonic)
                 val ciphertext = VaultCipher.encryptVault(mnemonic, googleUid, payload)
 
-                val folder = driveVaultManager.findOrCreateFolder()
-                driveVaultManager.uploadVault(folderId = folder.id, bytes = ciphertext)
+                firestoreVaultManager.uploadVault(googleUid, ciphertext)
 
                 VaultSession.unlock(mnemonic = mnemonic, kDb = kDb, googleUid = googleUid)
                 database = SquelchDatabase.create(context, kDb)
@@ -174,8 +166,8 @@ class VaultRepository @Inject constructor(
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val googleUid = signed.googleUid
-                val blob = driveVaultManager.downloadVault()
-                    ?: throw IllegalStateException("no vault.enc found on Drive")
+                val blob = firestoreVaultManager.downloadVault(googleUid)
+                    ?: throw IllegalStateException("no vault found on Firestore")
 
                 val payload = VaultCipher.decryptVault(mnemonic, googleUid, blob)
                 val kVault = VaultCipher.deriveKVault(mnemonic, googleUid)

@@ -16,9 +16,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import com.squelch.app.R
 import com.squelch.app.auth.AuthRepository
 import com.squelch.app.auth.AuthState
+import kotlinx.coroutines.launch
 
 @Composable
 fun SignInScreen(
@@ -42,9 +43,19 @@ fun SignInScreen(
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
             authRepository.onSignInResult(result.data)
-            if (authRepository.state.value is AuthState.SignedIn) {
+        }
+    }
+
+    LaunchedEffect(authState) {
+        when (authState) {
+            is AuthState.PendingGoogleAuth -> {
+                val idToken = (authState as AuthState.PendingGoogleAuth).idToken
+                authRepository.completeFirebaseAuth(idToken)
+            }
+            is AuthState.SignedIn -> {
                 onSignedIn()
             }
+            else -> {}
         }
     }
 
@@ -74,8 +85,14 @@ fun SignInScreen(
         )
         Spacer(modifier = Modifier.height(48.dp))
 
-        if (authState is AuthState.SigningIn) {
+        if (authState is AuthState.SigningIn || authState is AuthState.PendingGoogleAuth) {
             CircularProgressIndicator()
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = "Signing in...",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         } else {
             Button(
                 onClick = {
@@ -101,21 +118,6 @@ fun SignInScreen(
                 color = MaterialTheme.colorScheme.error,
                 style = MaterialTheme.typography.bodyMedium,
                 textAlign = TextAlign.Center
-            )
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-        OutlinedButton(
-            onClick = { },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp),
-            shape = RoundedCornerShape(12.dp),
-            enabled = false
-        ) {
-            Text(
-                text = "Create Account",
-                style = MaterialTheme.typography.titleMedium
             )
         }
     }
