@@ -34,6 +34,7 @@ import com.squelch.app.qr.QrCodec
 import com.squelch.app.qr.QrContact
 import com.squelch.app.util.toHex
 import com.squelch.app.ui.screens.chats.ChatsScreen
+import com.squelch.app.ui.screens.chats.ConversationScreen
 import com.squelch.app.ui.screens.contacts.AddContactScreen
 import com.squelch.app.ui.screens.contacts.ContactsScreen
 import com.squelch.app.ui.screens.contacts.MyQrScreen
@@ -180,7 +181,30 @@ fun AppEntry(
 
             composable(Screen.Chats.route) {
                 ChatsScreen(
-                    onNavigateToSettings = { navController.navigate(Screen.Settings.route) }
+                    onNavigateToSettings = { navController.navigate(Screen.Settings.route) },
+                    onNavigateToConversation = { id, name ->
+                        navController.navigate(Screen.Conversation.createRoute(id, name))
+                    }
+                )
+            }
+
+            composable(
+                route = Screen.Conversation.route,
+                arguments = listOf(
+                    navArgument("conversationId") { type = NavType.StringType },
+                    navArgument("conversationName") { type = NavType.StringType }
+                )
+            ) { backStackEntry ->
+                val conversationId = backStackEntry.arguments?.getString("conversationId") ?: ""
+                val conversationName = backStackEntry.arguments?.getString("conversationName") ?: ""
+                val signed = authRepository.signedIn()
+                val selfPubkey = signed?.googleUid ?: ""
+
+                ConversationScreen(
+                    conversationId = conversationId,
+                    conversationName = conversationName,
+                    selfPubkey = selfPubkey,
+                    onBack = { navController.popBackStack() }
                 )
             }
 

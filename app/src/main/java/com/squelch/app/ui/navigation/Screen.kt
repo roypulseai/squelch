@@ -16,6 +16,10 @@ sealed class Screen(val route: String) {
         fun createRoute(pin: String) = "mnemonic_backup/$pin"
     }
     data object Chats : Screen("chats")
+    data object Conversation : Screen("conversation/{conversationId}/{conversationName}") {
+        fun createRoute(conversationId: String, conversationName: String): String =
+            "conversation/$conversationId/${java.net.URLEncoder.encode(conversationName, "UTF-8")}"
+    }
     data object Contacts : Screen("contacts")
     data object AddContact : Screen("add_contact")
     data object MyQr : Screen("my_qr")
