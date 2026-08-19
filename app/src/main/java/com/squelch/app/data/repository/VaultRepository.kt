@@ -48,6 +48,7 @@ class VaultRepository @Inject constructor(
 
     val db: SquelchDatabase? get() = database
     val isUnlocked: Boolean get() = VaultSession.isUnlocked
+    val isLockEnabled: Boolean get() = biometricVaultManager.isLockEnabled()
 
     fun checkVaultState() {
         val signed = authRepository.signedIn() ?: return

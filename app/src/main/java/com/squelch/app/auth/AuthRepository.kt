@@ -14,6 +14,20 @@ class AuthRepository @Inject constructor(
     private val _state = MutableStateFlow<AuthState>(AuthState.Idle)
     val state: StateFlow<AuthState> = _state.asStateFlow()
 
+    init {
+        if (firebaseAuthManager.isSignedIn) {
+            val user = firebaseAuthManager.getCurrentFirebaseUser()
+            if (user != null) {
+                _state.value = AuthState.SignedIn(
+                    email = user.email ?: "",
+                    googleUid = user.uid,
+                    displayName = user.displayName ?: user.email ?: "Unknown",
+                    idToken = ""
+                )
+            }
+        }
+    }
+
     fun signInIntent(): Intent = firebaseAuthManager.getSignInIntent()
 
     fun onSignInResult(data: Intent?) {

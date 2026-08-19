@@ -26,10 +26,8 @@ import com.squelch.app.auth.AuthRepository
 import com.squelch.app.auth.AuthState
 import com.squelch.app.data.repository.VaultRepository
 import com.squelch.app.data.repository.VaultRepository.VaultState
-import com.squelch.app.crypto.Identity
 import com.squelch.app.crypto.VaultSession
 import com.squelch.app.qr.QrContact
-import com.squelch.app.util.toHex
 import com.squelch.app.ui.screens.chats.ChatsScreen
 import com.squelch.app.ui.screens.chats.ConversationScreen
 import com.squelch.app.ui.screens.chats.NewChatScreen
@@ -58,7 +56,7 @@ fun AppEntry(
         vaultState is VaultState.Unlocked -> Screen.Chats.route
         vaultState is VaultState.BiometricRequired -> Screen.Unlock.route
         vaultState is VaultState.Error -> Screen.Unlock.route
-        else -> Screen.Chats.route
+        else -> Screen.SignIn.route
     }
 
     LaunchedEffect(isSignedIn) {
@@ -209,6 +207,7 @@ fun AppEntry(
 
             composable(Screen.Settings.route) {
                 SettingsScreen(
+                    lockEnabled = vaultRepository.isLockEnabled,
                     onSignOut = {
                         vaultRepository.signOut()
                         authRepository.signOut()

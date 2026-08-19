@@ -1,6 +1,5 @@
 package com.squelch.app.ui.screens.settings
 
-import android.util.Log
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -22,19 +21,21 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import com.squelch.app.auth.BiometricVaultManager
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
-    biometricVaultManager: BiometricVaultManager? = null,
+    lockEnabled: Boolean = false,
     onSignOut: () -> Unit = {},
     onLock: () -> Unit = {},
     onEnableBiometric: () -> Unit = {},
     onDisableBiometric: () -> Unit = {}
 ) {
-    val lockEnabled = biometricVaultManager?.isLockEnabled() ?: false
+    var checked by remember { mutableStateOf(lockEnabled) }
 
     Scaffold(
         topBar = {
@@ -60,8 +61,9 @@ fun SettingsScreen(
                 },
                 trailingContent = {
                     Switch(
-                        checked = lockEnabled,
+                        checked = checked,
                         onCheckedChange = { enabled ->
+                            checked = enabled
                             if (enabled) onEnableBiometric() else onDisableBiometric()
                         }
                     )

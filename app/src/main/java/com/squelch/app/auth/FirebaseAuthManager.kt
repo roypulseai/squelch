@@ -27,6 +27,7 @@ class FirebaseAuthManager @Inject constructor(
 
     val currentUid: String? get() = auth.currentUser?.uid
     val isSignedIn: Boolean get() = auth.currentUser != null
+    fun getCurrentFirebaseUser() = auth.currentUser
 
     fun getSignInIntent(): Intent {
         val webClientId = context.getString(R.string.default_web_client_id)
