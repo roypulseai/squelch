@@ -2,6 +2,7 @@ package com.squelch.app.auth
 
 import android.content.Context
 import android.content.Intent
+import android.util.Log
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInClient
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
@@ -15,24 +16,50 @@ import javax.inject.Singleton
 class GoogleSignInManager @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
-    private val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-        .requestIdToken(context.getString(R.string.oauth_client_id))
-        .requestServerAuthCode(context.getString(R.string.oauth_client_id))
-        .requestEmail()
-        .requestProfile()
-        .build()
+    companion object {
+        private const val TAG = "GoogleSignInManager"
+    }
 
-    private val client: GoogleSignInClient = GoogleSignIn.getClient(context, gso)
+    private val client: GoogleSignInClient? by lazy {
+        try {
+            val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+                .requestIdToken(context.getString(R.string.oauth_client_id))
+                .requestServerAuthCode(context.getString(R.string.oauth_client_id))
+                .requestEmail()
+                .requestProfile()
+                .build()
+            GoogleSignIn.getClient(context, gso)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to create GoogleSignInClient: ${e.message}", e)
+            null
+        }
+    }
 
-    fun signInIntent(): Intent = client.signInIntent
+    fun signInIntent(): Intent {
+        return client?.signInIntent
+            ?: Intent().apply {
+                putExtra("error", "Google Sign-In not configured")
+            }
+    }
 
-    fun getLastSignedInAccount() = GoogleSignIn.getLastSignedInAccount(context)
+    fun getLastSignedInAccount() = try {
+        GoogleSignIn.getLastSignedInAccount(context)
+    } catch (e: Exception) {
+        Log.e(TAG, "getLastSignedInAccount failed: ${e.message}")
+        null
+    }
 
-    fun signOut() = client.signOut()
+    fun signOut() {
+        try {
+            client?.signOut()
+        } catch (e: Exception) {
+            Log.e(TAG, "signOut failed: ${e.message}")
+        }
+    }
 
     fun parseSignInResult(data: Intent?): AuthState {
-        val task = GoogleSignIn.getSignedInAccountFromIntent(data)
         return try {
+            val task = GoogleSignIn.getSignedInAccountFromIntent(data)
             val account = task.getResult(ApiException::class.java)
             AuthState.SignedIn(
                 email = account.email ?: "",
@@ -42,7 +69,11 @@ class GoogleSignInManager @Inject constructor(
                 serverAuthCode = account.serverAuthCode
             )
         } catch (e: ApiException) {
+            Log.e(TAG, "Sign-in failed: code=${e.statusCode}", e)
             AuthState.Error("Sign-in failed (code ${e.statusCode}): ${e.message}")
+        } catch (e: Exception) {
+            Log.e(TAG, "Sign-in parse failed", e)
+            AuthState.Error("Sign-in failed: ${e.message}")
         }
     }
 }
