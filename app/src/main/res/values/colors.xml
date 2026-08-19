@@ -1,4 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="seed">#FF00E676</color>
+    <color name="ic_launcher_background">#FF0D1117</color>
+    <color name="brand_primary">#FF00E676</color>
+    <color name="brand_primary_variant">#FF00C853</color>
+    <color name="brand_on_primary">#FF0A0A12</color>
+    <color name="brand_surface">#FF0D1117</color>
+    <color name="brand_on_surface">#FFE6E6E6</color>
 </resources>

@@ -68,7 +68,7 @@ fun SignInScreen(
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = "Encrypted peer-to-peer chat",
+            text = "Encrypted. Decentralized. Yours.",
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )

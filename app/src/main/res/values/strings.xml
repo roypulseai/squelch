@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Squelch</string>
+    <string name="tagline">Encrypted. Decentralized. Yours.</string>
+    <string name="sign_in_subtitle">Encrypted peer-to-peer chat</string>
 </resources>
