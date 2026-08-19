@@ -7,7 +7,6 @@ import org.bouncycastle.crypto.params.X25519PrivateKeyParameters
 import org.bouncycastle.crypto.params.X25519PublicKeyParameters
 import java.security.SecureRandom
 
-/** X25519 key agreement wrapper (BouncyCastle, RFC 7748). */
 object X25519 {
     const val KEY_SIZE = 32
 
@@ -22,7 +21,6 @@ object X25519 {
         return X25519PrivateKeyParameters(secret, 0).generatePublicKey().encoded
     }
 
-    /** DH(privateKey, publicKey) -> 32-byte shared secret. Throws on all-zero output. */
     fun dh(privateKey: ByteArray, publicKey: ByteArray): ByteArray {
         require(privateKey.size == KEY_SIZE && publicKey.size == KEY_SIZE)
         val out = ByteArray(KEY_SIZE)

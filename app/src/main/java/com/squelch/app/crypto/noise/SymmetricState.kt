@@ -2,7 +2,6 @@ package com.squelch.app.crypto.noise
 
 import com.squelch.app.util.Bytes
 
-/** Noise SymmetricState (spec 5.2): CipherState + chaining key + handshake hash. */
 class SymmetricState {
     private var ck: ByteArray = ByteArray(0)
     private var h: ByteArray = ByteArray(0)

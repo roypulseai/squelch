@@ -5,7 +5,6 @@ import com.squelch.app.util.Bytes
 import java.io.ByteArrayOutputStream
 import java.security.SecureRandom
 
-/** An X25519 keypair used as the Noise static (long-term) or ephemeral key. */
 data class KeyPair(val secret: ByteArray, val public: ByteArray)
 
 enum class HandshakePattern(val messages: List<List<String>>) {
@@ -18,12 +17,6 @@ enum class HandshakePattern(val messages: List<List<String>>) {
     }
 }
 
-/**
- * Noise HandshakeState (spec 5.3) with the DH-token rules:
- *  - "es": initiator -> DH(e, rs), responder -> DH(s, re)
- *  - "se": initiator -> DH(s, re), responder -> DH(e, rs)
- *  - "ee": DH(e, re); "ss": DH(s, rs)
- */
 class HandshakeState private constructor(
     private val pattern: HandshakePattern,
     private val initiator: Boolean,
@@ -62,7 +55,6 @@ class HandshakeState private constructor(
 
             val state = HandshakeState(pattern, initiator, localStatic, remoteStatic, symmetric, random)
 
-            // Pre-message public keys are mixed into h, initiator's first (spec 5.3).
             if (pattern == HandshakePattern.KK) {
                 val initiatorStaticPub = if (initiator) localStatic.public else remoteStatic!!
                 val responderStaticPub = if (initiator) remoteStatic!! else localStatic.public
@@ -151,8 +143,6 @@ class HandshakeState private constructor(
         val payload = symmetric.decryptAndHash(message.copyOfRange(pos, message.size))
         return Result(message, payload, isDone, if (isDone) symmetric.split() else null)
     }
-
-    fun remoteEphemeral(): ByteArray? = re
 
     fun remoteStatic(): ByteArray? = remoteStatic
 

@@ -1,9 +1,5 @@
 package com.squelch.app.util
 
-/**
- * Byte-string helpers used across crypto and wire code. Lifted wholesale
- * from the v1 archive (`_archive/v1/.../util/Bytes.kt`) for parity.
- */
 object Bytes {
     private val HEX = "0123456789abcdef".toCharArray()
 
@@ -43,8 +39,6 @@ object Bytes {
         return out
     }
 
-    fun intFrom16(hi: Byte, lo: Byte): Int = ((hi.toInt() and 0xff) shl 8) or (lo.toInt() and 0xff)
-
     fun concat(vararg arrays: ByteArray): ByteArray {
         var total = 0
         for (a in arrays) total += a.size
@@ -70,15 +64,5 @@ object Bytes {
         val out = ByteArray(n)
         secureRandom.nextBytes(out)
         return out
-    }
-
-    fun compareUnsigned(a: ByteArray, b: ByteArray): Int {
-        val n = minOf(a.size, b.size)
-        for (i in 0 until n) {
-            val x = a[i].toInt() and 0xff
-            val y = b[i].toInt() and 0xff
-            if (x != y) return if (x < y) -1 else 1
-        }
-        return a.size.compareTo(b.size)
     }
 }

@@ -1,13 +1,13 @@
-import org.jetbrains.kotlin.gradle.dsl.JvmTarget
-
-import java.util.Properties
 import java.io.FileInputStream
+import java.util.Properties
 
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.devtools.ksp")
+    id("com.google.dagger.hilt.android")
+    id("org.jetbrains.kotlin.kapt")
 }
 
 android {
@@ -18,55 +18,39 @@ android {
         applicationId = "com.squelch.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 2
-        versionName = "0.2.0"
+        versionCode = 3
+        versionName = "1.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     signingConfigs {
-        // Release: load from local.properties. Default to the debug
-        // signing config so `assembleRelease` still builds if you
-        // haven't run tools/setup-release-keystore.sh yet (the resulting
-        // APK won't be Play-uploadable; check the setup script).
-        val keystoreProps = Properties().apply {
-            val f = rootProject.file("local.properties")
-            if (f.exists()) load(FileInputStream(f))
-        }
-        val keystoreFile = keystoreProps.getProperty(
-            "squelch.keystore.file", "keystore/squelch.jks"
-        )
-        val storePass = keystoreProps.getProperty(
-            "squelch.keystore.storepass", ""
-        )
-        val keyPass = keystoreProps.getProperty(
-            "squelch.keystore.keypass", ""
-        )
-        val alias = keystoreProps.getProperty(
-            "squelch.keystore.alias", "squelch"
-        )
-
         create("release") {
-            if (rootProject.file(keystoreFile).exists() && storePass.isNotEmpty()) {
-                storeFile = rootProject.file(keystoreFile)
-                storePassword = storePass
-                keyAlias = alias
-                keyPassword = keyPass
+            val props = file("${rootProject.projectDir}/local.properties")
+            if (props.exists()) {
+                val p = Properties()
+                FileInputStream(props).use { p.load(it) }
+                storeFile = file(p.getProperty("squelch.keystore.file", "keystore/squelch.jks"))
+                storePassword = p.getProperty("squelch.keystore.storepass", "")
+                keyAlias = p.getProperty("squelch.keystore.alias", "squelch")
+                keyPassword = p.getProperty("squelch.keystore.keypass", "")
             }
         }
     }
 
     buildTypes {
-        release {
-            isMinifyEnabled = false
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            signingConfig = signingConfigs.findByName("release")
-        }
         debug {
-            // Same signing identity as release so the OAuth client only
-            // needs ONE SHA-1 registered. Swap back to the default debug
-            // keystore when you create a separate OAuth client for it.
-            signingConfig = signingConfigs.findByName("release")
+            isDebuggable = true
+            isMinifyEnabled = false
+        }
+        release {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 
@@ -81,70 +65,94 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     packaging {
         resources {
-            excludes += "/META-INF/{AL2.0,LGPL2.1,DEPENDENCIES,LICENSE,NOTICE}"
-            excludes += "/META-INF/versions/9/OSGI-INF/MANIFEST.MF"
-            excludes += "/META-INF/LICENSE.md"
-            excludes += "/META-INF/LICENSE-notice.md"
+            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            excludes += "META-INF/versions/9/OSGI-INF/MANIFEST.MF"
+            excludes += "META-INF/DEPENDENCIES"
+            excludes += "META-INF/LICENSE"
+            excludes += "META-INF/LICENSE.txt"
+            excludes += "META-INF/NOTICE"
+            excludes += "META-INF/NOTICE.txt"
         }
     }
 }
 
+kapt {
+    correctErrorTypes = true
+}
+
 dependencies {
+    // Compose
     val composeBom = platform("androidx.compose:compose-bom:2025.05.00")
     implementation(composeBom)
-
-    implementation("androidx.core:core-ktx:1.15.0")
-    implementation("androidx.activity:activity-compose:1.10.1")
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.9.0")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.9.0")
-    implementation("androidx.lifecycle:lifecycle-service:2.9.0")
-    implementation("androidx.compose.ui:ui")
-    implementation("androidx.compose.ui:ui-graphics")
-    implementation("androidx.compose.foundation:foundation")
-    implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.compose.material3:material3")
+    implementation("androidx.compose.material:material-icons-extended")
+    implementation("androidx.compose.ui:ui")
+    implementation("androidx.compose.ui:ui-tooling-preview")
+    debugImplementation("androidx.compose.ui:ui-tooling")
+
+    // Core
+    implementation("androidx.core:core-ktx:1.16.0")
+    implementation("androidx.activity:activity-compose:1.10.1")
+
+    // Navigation
     implementation("androidx.navigation:navigation-compose:2.9.0")
 
-    // Auth: Google Sign-In. Drive is called via raw REST using a Bearer token
-// obtained through GoogleAuthUtil, so the v3 client library is not needed.
-    implementation("com.google.android.gms:play-services-auth:21.0.0")
+    // Lifecycle + ViewModel
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.9.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.9.0")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.9.0")
 
-    // Google Nearby Connections for the offline mesh (spec section 3.3).
+    // Hilt
+    implementation("com.google.dagger:hilt-android:2.51.1")
+    kapt("com.google.dagger:hilt-compiler:2.51.1")
+    implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
+
+    // Google Sign-In
+    implementation("com.google.android.gms:play-services-auth:21.0.0")
     implementation("com.google.android.gms:play-services-nearby:19.3.0")
 
-    // Encrypted local DB. Room gives us the ergonomics; SQLCipher backs the file.
+    // Drive REST
+    implementation("com.google.apis:google-api-services-drive:v3-rev20230822-2.0.0")
+
+    // Crypto
     implementation("net.zetetic:sqlcipher-android:4.5.4@aar")
     implementation("androidx.sqlite:sqlite-ktx:2.4.0")
+    implementation("org.bouncycastle:bcprov-jdk18on:1.80")
+
+    // Room
     implementation("androidx.room:room-runtime:2.7.1")
     implementation("androidx.room:room-ktx:2.7.1")
     ksp("androidx.room:room-compiler:2.7.1")
 
-    // Cryptography: BouncyCastle for the Argon2id KDF used to wrap the vault.
-    implementation("org.bouncycastle:bcprov-jdk18on:1.80")
-
-    // JSON (vault payload, contact exchange). org.json is part of the Android
-    // SDK at compile time and avoids pulling in kotlinx-serialization plugin.
-
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.10.2")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-guava:1.10.2")
-
-    // WebSocket client for the online relay transport (M-online).
+    // OkHttp
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
-    // QR encoding / decoding (ZXing core - no Android deps, small).
-    implementation("com.google.zxing:core:3.5.3")
+    // QR / Camera
+    implementation("com.journeyapps:zxing-android-embedded:4.3.0")
+    implementation("androidx.camera:camera-core:1.4.0")
+    implementation("androidx.camera:camera-camera2:1.4.0")
+    implementation("androidx.camera:camera-lifecycle:1.4.0")
+    implementation("androidx.camera:camera-view:1.4.0")
 
-    // CameraX for the live QR scan (M-online).
-    val cameraxVersion = "1.4.0"
-    implementation("androidx.camera:camera-camera2:$cameraxVersion")
-    implementation("androidx.camera:camera-lifecycle:$cameraxVersion")
-    implementation("androidx.camera:camera-view:$cameraxVersion")
+    // Coroutines
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
 
-    debugImplementation("androidx.compose.ui:ui-tooling")
-    implementation("androidx.compose.ui:ui-tooling-preview")
+    // JSON
+    implementation("org.json:json:20231013")
+
+    // Splash Screen
+    implementation("androidx.core:core-splashscreen:1.0.1")
+
+    // Testing
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
+    testImplementation("app.cash.turbine:turbine:1.2.0")
+    testImplementation("io.mockk:mockk:1.13.16")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
 }

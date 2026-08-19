@@ -1,20 +1,10 @@
 package com.squelch.app.crypto
 
-/**
- * Process-wide in-memory vault state after the user enters a valid PIN
- * and the vault decrypts.
- *
- * Holds the mnemonic in memory plus the derived database passphrase.
- * Cleared on [lock] or on app process death (we never persist these).
- */
 object VaultSession {
 
-    @Volatile
-    private var mnemonic: String? = null
-    @Volatile
-    private var kDb: ByteArray? = null
-    @Volatile
-    private var googleUid: String? = null
+    @Volatile private var mnemonic: String? = null
+    @Volatile private var kDb: ByteArray? = null
+    @Volatile private var googleUid: String? = null
 
     val isUnlocked: Boolean get() = mnemonic != null && kDb != null
 

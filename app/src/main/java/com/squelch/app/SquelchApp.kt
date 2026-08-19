@@ -1,10 +1,7 @@
 package com.squelch.app
 
 import android.app.Application
+import dagger.hilt.android.HiltAndroidApp
 
-/** Application root. */
-class SquelchApp : Application() {
-    override fun onCreate() {
-        super.onCreate()
-    }
-}
+@HiltAndroidApp
+class SquelchApp : Application()

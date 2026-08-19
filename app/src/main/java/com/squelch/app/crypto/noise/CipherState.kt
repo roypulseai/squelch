@@ -2,23 +2,17 @@ package com.squelch.app.crypto.noise
 
 import com.squelch.app.util.Bytes
 
-/**
- * Noise CipherState (spec 5.1): a 32-byte key and 64-bit nonce counter.
- * An empty key (null) means cleartext passthrough.
- */
 class CipherState(
     private var key: ByteArray? = null,
     private var n: Long = 0L
 ) {
     companion object {
-        private const val MAX_NONCE = -1L // 2^64 - 1
+        private const val MAX_NONCE = -1L
     }
 
     fun hasKey(): Boolean = key != null
 
-    fun setNonce(value: Long) {
-        n = value
-    }
+    fun setNonce(value: Long) { n = value }
 
     fun encryptWithAd(ad: ByteArray, plaintext: ByteArray): ByteArray {
         val k = key ?: return plaintext
@@ -36,7 +30,6 @@ class CipherState(
         return pt
     }
 
-    /** REKEY(k): k = first 32 bytes of ENCRYPT(k, maxnonce, zerolen, zeros32). */
     fun rekey() {
         val k = key ?: return
         val zeros = ByteArray(32)

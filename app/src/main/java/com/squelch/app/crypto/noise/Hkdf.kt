@@ -3,7 +3,6 @@ package com.squelch.app.crypto.noise
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 
-/** SHA-256, HMAC-SHA256 and HKDF-SHA256 as required by the Noise spec (sections 4.3, 5). */
 object Hkdf {
     const val HASHLEN = 32
     private const val BLOCKLEN = 64
@@ -19,10 +18,6 @@ object Hkdf {
         return mac.doFinal(data)
     }
 
-    /**
-     * HKDF as defined in Noise: salt = chaining_key, info = zero-length.
-     * Returns numOutputs HASHLEN-byte outputs.
-     */
     fun hkdf(chainingKey: ByteArray, inputKeyMaterial: ByteArray, numOutputs: Int): List<ByteArray> {
         require(numOutputs in 2..3)
         val tempKey = hmac(chainingKey, inputKeyMaterial)

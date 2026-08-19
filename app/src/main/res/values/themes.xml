@@ -1,8 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.Squelch" parent="android:Theme.Material.NoActionBar">
-        <item name="android:windowBackground">#0a0a12</item>
-        <item name="android:statusBarColor">#0a0a12</item>
-        <item name="android:navigationBarColor">#0a0a12</item>
+    <style name="Theme.Squelch" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+
+    <style name="Theme.Squelch.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/seed</item>
+        <item name="postSplashScreenTheme">@style/Theme.Squelch</item>
     </style>
 </resources>

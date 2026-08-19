@@ -5,7 +5,6 @@ import org.bouncycastle.crypto.params.Ed25519PublicKeyParameters
 import org.bouncycastle.crypto.signers.Ed25519Signer
 import java.security.SecureRandom
 
-/** Ed25519 signing wrapper (BouncyCastle). Identity = 32-byte seed. */
 object Ed25519 {
     const val SEED_SIZE = 32
     const val PUBLIC_SIZE = 32

@@ -1,46 +1,32 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!--
-    Squelch launcher foreground - "phosphor retro wave".
-
-    Conceptual layers, drawn back-to-front:
-      1. Three concentric oscilloscope rings (slight stroke-width taper).
-      2. A diagonal sweeping beam that says "Squelch" = "suppress noise
-         and pass the signal"; the beam forms the implicit 'S'.
-      3. One bright phosphor-green pulse dot at the centre of the rings.
-      4. Two horizontal scan-line highlights that give a CRT shimmer.
--->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-
-    <!-- 1. Concentric rings. Inner ring sits inside the 72dp safe zone,
-         outer rings extend further but stay within the 108dp canvas.
-         Strokes only - no fill - so adaptive icon masking works cleanly. -->
-    <path android:strokeColor="#00FF41" android:strokeWidth="1.6"
-        android:pathData="M54,54 m-30,0 a30,30 0 1,0 60,0 a30,30 0 1,0 -60,0" />
-    <path android:strokeColor="#1F7C32" android:strokeWidth="1.2"
-        android:pathData="M54,54 m-21,0 a21,21 0 1,0 42,0 a21,21 0 1,0 -42,0" />
-    <path android:strokeColor="#0F5824" android:strokeWidth="1.0"
-        android:pathData="M54,54 m-12,0 a12,12 0 1,0 24,0 a12,12 0 1,0 -24,0" />
-
-    <!-- 2. The 'S' beam: two short arcs that read as a squelch squiggle.
-         Upper arc opens down-right, lower arc opens up-left. -->
-    <path android:strokeColor="#00FF41" android:strokeWidth="3.6"
-        android:strokeLineCap="round" android:strokeLineJoin="round"
-        android:pathData="M64,42 C70,46 70,52 60,54 C50,56 50,62 60,66" />
-
-    <!-- 3. The phosphor pulse dot - the centre of the dial. -->
-    <path android:fillColor="#00FF41"
-        android:pathData="M54,54 m-2.8,0 a2.8,2.8 0 1,0 5.6,0 a2.8,2.8 0 1,0 -5.6,0" />
-
-    <!-- 4. CRT scan-line highlights: two thin amber hairlines
-         ghosting across the mark at fixed offsets. -->
-    <path android:strokeColor="#FFB000" android:strokeWidth="0.4"
-        android:strokeAlpha="0.6"
-        android:pathData="M30,46 L78,46" />
-    <path android:strokeColor="#FFB000" android:strokeWidth="0.4"
-        android:strokeAlpha="0.4"
-        android:pathData="M30,62 L78,62" />
+    <path
+        android:fillColor="#FF00E676"
+        android:pathData="M54,54m-24,0a24,24 0,1 1,48 0a24,24 0,1 1,-48 0"/>
+    <path
+        android:fillColor="#FF00E676"
+        android:pathData="M54,54m-16,0a16,16 0,1 1,32 0a16,16 0,1 1,-32 0"
+        android:strokeWidth="1.5"
+        android:strokeColor="#FF00E676"/>
+    <path
+        android:fillColor="#FF00E676"
+        android:pathData="M54,54m-8,0a8,8 0,1 1,16 0a8,8 0,1 1,-16 0"/>
+    <path
+        android:pathData="M30,54 L78,54"
+        android:strokeWidth="0.5"
+        android:strokeColor="#00FFFFFF"
+        android:strokeAlpha="0.3"/>
+    <path
+        android:pathData="M30,48 L78,48"
+        android:strokeWidth="0.5"
+        android:strokeColor="#00FFFFFF"
+        android:strokeAlpha="0.2"/>
+    <path
+        android:pathData="M30,60 L78,60"
+        android:strokeWidth="0.5"
+        android:strokeColor="#00FFFFFF"
+        android:strokeAlpha="0.2"/>
 </vector>

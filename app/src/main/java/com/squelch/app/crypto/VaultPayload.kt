@@ -3,25 +3,12 @@ package com.squelch.app.crypto
 import org.json.JSONArray
 import org.json.JSONObject
 
-/**
- * In-memory representation of the JSON stored (encrypted) at /squelch/vault.enc.
- *
- *   {
- *     "version":  1,
- *     "mnemonic": "abandon abandon ... about",
- *     "contacts": [{displayName, edPub, xPub, callsign, trustLevel, ...}, ...],
- *     "settings": { "lastSeenPrivacy": "...", ... }
- *   }
- *
- * The contacts array is reserved for the M5+/M7 wire-up; it starts empty.
- */
 data class VaultPayload(
     val version: Int = 1,
     val mnemonic: String,
     val contacts: List<ContactEntry> = emptyList(),
     val settings: Settings = Settings()
 ) {
-
     data class ContactEntry(
         val edPub: String,
         val xPub: String,
@@ -31,8 +18,8 @@ data class VaultPayload(
     )
 
     data class Settings(
-        val theme: String = "phosphor",
-        val showCallsSigns: Boolean = true,
+        val theme: String = "default",
+        val showCallsigns: Boolean = true,
         val meshPublic: Boolean = true
     )
 
@@ -50,7 +37,7 @@ data class VaultPayload(
         }
         val settingsJson = JSONObject()
             .put("theme", settings.theme)
-            .put("showCallsigns", settings.showCallsSigns)
+            .put("showCallsigns", settings.showCallsigns)
             .put("meshPublic", settings.meshPublic)
         val root = JSONObject()
             .put("version", version)
@@ -80,8 +67,8 @@ data class VaultPayload(
             }
             val sObj = root.optJSONObject("settings")
             val settings = if (sObj != null) Settings(
-                theme = sObj.optString("theme", "phosphor"),
-                showCallsSigns = sObj.optBoolean("showCallsigns", true),
+                theme = sObj.optString("theme", "default"),
+                showCallsigns = sObj.optBoolean("showCallsigns", true),
                 meshPublic = sObj.optBoolean("meshPublic", true)
             ) else Settings()
             return VaultPayload(

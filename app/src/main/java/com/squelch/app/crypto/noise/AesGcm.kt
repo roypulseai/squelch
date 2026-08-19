@@ -5,7 +5,6 @@ import javax.crypto.Cipher
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
-/** AES-256-GCM with the 96-bit nonce construction Noise uses (4 zero bytes + 8-byte BE counter). */
 object AesGcm {
     private const val KEY_LEN = 32
     private const val TAG_BITS = 128

@@ -2,13 +2,6 @@ package com.squelch.app.crypto.noise
 
 import java.security.SecureRandom
 
-/**
- * A Noise session: runs an XX or KK handshake, then provides encrypt/decrypt
- * transport messages with periodic forward-secrecy rekeying.
- *
- * After the handshake completes: initiator uses c1 to send / c2 to receive,
- * responder uses c2 to send / c1 to receive (spec 5.3).
- */
 class NoiseSession private constructor(
     private val pattern: HandshakePattern,
     private val initiator: Boolean,
@@ -52,7 +45,6 @@ class NoiseSession private constructor(
     val isInitiator: Boolean get() = initiator
     val patternName: String get() = pattern.patternName
 
-    /** Write the next handshake message; returns its wire bytes. */
     fun writeHandshake(payload: ByteArray = ByteArray(0)): ByteArray {
         val h = hs ?: throw IllegalStateException("no handshake in progress")
         val result = h.writeMessage(payload)
@@ -60,7 +52,6 @@ class NoiseSession private constructor(
         return result.message
     }
 
-    /** Read a handshake message; returns the plaintext handshake payload. */
     fun readHandshake(message: ByteArray): ByteArray {
         val h = hs ?: throw IllegalStateException("no handshake in progress")
         val result = h.readMessage(message)
@@ -81,7 +72,6 @@ class NoiseSession private constructor(
         transportCount = 0
     }
 
-    /** Encrypt a transport message (ad = empty, per spec). */
     fun encrypt(plaintext: ByteArray): ByteArray {
         require(handshakeComplete) { "handshake not complete" }
         if (++transportCount >= REKEY_EVERY) rekey()
@@ -93,7 +83,6 @@ class NoiseSession private constructor(
         return recvCs!!.decryptWithAd(ByteArray(0), ciphertext)
     }
 
-    /** Explicit rekey of both directions (spec 11.3). */
     fun rekey() {
         sendCs?.rekey()
         recvCs?.rekey()
