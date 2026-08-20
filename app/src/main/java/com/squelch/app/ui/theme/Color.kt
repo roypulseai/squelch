@@ -2,15 +2,26 @@ package com.squelch.app.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-val Green40 = Color(0xFF00E676)
-val Green80 = Color(0xFF69F0AE)
-val Green90 = Color(0xFFA5D6A7)
-val GreenGrey40 = Color(0xFF4E6E50)
-val Teal40 = Color(0xFF00695C)
-val Background = Color(0xFF0A0A12)
-val Surface = Color(0xFF141420)
-val SurfaceVariant = Color(0xFF1E1E2E)
-val OnSurface = Color(0xFFE0E0E0)
-val OnSurfaceVariant = Color(0xFF9E9E9E)
-val Error = Color(0xFFFF5252)
-val Amber = Color(0xFFFFB000)
+val Accent = Color(0xFF00A884)
+val AccentDark = Color(0xFF008069)
+val AccentLight = Color(0xFF00BFA5)
+
+val DarkBackground = Color(0xFF0B141A)
+val DarkSurface = Color(0xFF1F2C34)
+val DarkSurfaceVariant = Color(0xFF2A3942)
+val DarkOnSurface = Color(0xFFE9EDEF)
+val DarkOnSurfaceVariant = Color(0xFF8696A0)
+
+val SentBubble = Color(0xFF005C4B)
+val ReceivedBubble = Color(0xFF1F2C34)
+
+val LightBackground = Color(0xFFECE5DD)
+val LightSurface = Color(0xFFFFFFFF)
+val LightSurfaceVariant = Color(0xFFF0F2F5)
+val LightOnSurface = Color(0xFF111B21)
+val LightOnSurfaceVariant = Color(0xFF667781)
+
+val ErrorLight = Color(0xFFEA4335)
+val ErrorDark = Color(0xFFFF6B6B)
+
+val OnlineIndicator = Color(0xFF00A884)

@@ -39,6 +39,9 @@ service_account*.json
 # Firebase config - contains API keys, must not be in public repos
 google-services.json
 
+# Cloud Functions dependencies
+functions/node_modules/
+
 # Release keystores - the public repo ships the example + setup
 # script; the real .jks stays out of git.
 keystore/*.jks

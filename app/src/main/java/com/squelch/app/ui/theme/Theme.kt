@@ -8,38 +8,61 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 
 private val DarkColorScheme = darkColorScheme(
-    primary = Green80,
-    secondary = GreenGrey40,
-    tertiary = Teal40,
-    background = Background,
-    surface = Surface,
-    surfaceVariant = SurfaceVariant,
-    onPrimary = Background,
-    onSecondary = Green80,
-    onBackground = OnSurface,
-    onSurface = OnSurface,
-    onSurfaceVariant = OnSurfaceVariant,
-    error = Error,
+    primary = Accent,
+    onPrimary = DarkBackground,
+    primaryContainer = AccentDark,
+    onPrimaryContainer = DarkOnSurface,
+    secondary = AccentLight,
+    onSecondary = DarkBackground,
+    secondaryContainer = DarkSurfaceVariant,
+    onSecondaryContainer = DarkOnSurface,
+    tertiary = Accent,
+    onTertiary = DarkBackground,
+    background = DarkBackground,
+    onBackground = DarkOnSurface,
+    surface = DarkSurface,
+    onSurface = DarkOnSurface,
+    surfaceVariant = DarkSurfaceVariant,
+    onSurfaceVariant = DarkOnSurfaceVariant,
+    outline = DarkOnSurfaceVariant,
+    error = ErrorDark,
+    onError = DarkBackground,
+    errorContainer = Color(0xFF3D1A1A),
+    onErrorContainer = Color(0xFFFFB4AB),
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = Green40,
-    secondary = GreenGrey40,
-    tertiary = Teal40,
-    background = OnSurface,
-    surface = OnSurface,
-    onPrimary = OnSurface,
-    onBackground = Background,
-    onSurface = Background,
+    primary = AccentDark,
+    onPrimary = LightSurface,
+    primaryContainer = Accent,
+    onPrimaryContainer = LightOnSurface,
+    secondary = Accent,
+    onSecondary = LightSurface,
+    secondaryContainer = LightSurfaceVariant,
+    onSecondaryContainer = LightOnSurface,
+    tertiary = AccentDark,
+    onTertiary = LightSurface,
+    background = LightBackground,
+    onBackground = LightOnSurface,
+    surface = LightSurface,
+    onSurface = LightOnSurface,
+    surfaceVariant = LightSurfaceVariant,
+    onSurfaceVariant = LightOnSurfaceVariant,
+    outline = LightOnSurfaceVariant,
+    error = ErrorLight,
+    onError = LightSurface,
+    errorContainer = Color(0xFFFFDAD6),
+    onErrorContainer = Color(0xFF410002),
 )
 
 @Composable
 fun SquelchTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = true,
+    dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val colorScheme = when {

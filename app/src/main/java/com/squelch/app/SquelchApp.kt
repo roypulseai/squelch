@@ -14,6 +14,7 @@ import com.squelch.app.auth.AuthRepository
 import com.squelch.app.data.remote.BackupWorker
 import com.squelch.app.data.remote.DriveBackupManager
 import com.squelch.app.data.remote.FirestoreVaultManager
+import com.squelch.app.messaging.MessageForegroundService
 import com.squelch.app.util.Notifications
 import dagger.hilt.android.HiltAndroidApp
 import java.io.File

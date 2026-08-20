@@ -1,9 +1,21 @@
 package com.squelch.app.ui.screens.settings
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Backup
@@ -15,7 +27,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
@@ -27,8 +38,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -52,8 +69,8 @@ fun SettingsScreen(
             TopAppBar(
                 title = { Text("Settings") },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface
                 )
             )
         }
@@ -62,23 +79,31 @@ fun SettingsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
+                .verticalScroll(rememberScrollState())
         ) {
-            ListItem(
-                headlineContent = { Text(displayName.ifEmpty { "Profile" }) },
-                supportingContent = { Text(email) },
-                leadingContent = {
-                    Icon(Icons.Default.Person, contentDescription = null)
-                },
-                modifier = Modifier.clickable { onNavigateToProfile() }
+            ProfileCard(
+                displayName = displayName,
+                email = email,
+                onClick = onNavigateToProfile
             )
-            HorizontalDivider()
-            ListItem(
-                headlineContent = { Text("Vault Lock") },
-                supportingContent = { Text("Require biometric/PIN to unlock vault") },
-                leadingContent = {
-                    Icon(Icons.Default.Fingerprint, contentDescription = null)
-                },
-                trailingContent = {
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            SectionHeader("Account")
+            SettingsItem(
+                icon = Icons.Default.Person,
+                title = "Profile",
+                onClick = onNavigateToProfile
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            SectionHeader("Security")
+            SettingsItem(
+                icon = Icons.Default.Fingerprint,
+                title = "Vault Lock",
+                subtitle = "Require biometric/PIN to unlock vault",
+                trailing = {
                     Switch(
                         checked = checked,
                         onCheckedChange = { enabled ->
@@ -88,45 +113,209 @@ fun SettingsScreen(
                     )
                 }
             )
-            HorizontalDivider()
-            ListItem(
-                headlineContent = { Text("Lock Now") },
-                leadingContent = {
-                    Icon(Icons.Default.Lock, contentDescription = null)
-                },
-                modifier = Modifier.clickable { onLock() }
+            SettingsItem(
+                icon = Icons.Default.Lock,
+                title = "Lock Now",
+                onClick = onLock
             )
-            HorizontalDivider()
-            ListItem(
-                headlineContent = { Text("Backup to Google Drive") },
-                supportingContent = { Text("Save vault & messages to your Drive") },
-                leadingContent = {
-                    Icon(Icons.Default.Backup, contentDescription = null)
-                },
-                trailingContent = {
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            SectionHeader("Chats")
+            SettingsItem(
+                icon = Icons.Default.Backup,
+                title = "Backup to Google Drive",
+                subtitle = "Save vault & messages to your Drive",
+                trailing = {
                     if (isBackingUp) {
-                        CircularProgressIndicator(modifier = Modifier.padding(end = 8.dp))
+                        CircularProgressIndicator(
+                            modifier = Modifier
+                                .padding(end = 8.dp)
+                                .size(20.dp),
+                            strokeWidth = 2.dp
+                        )
                     }
                 },
-                modifier = Modifier.clickable(enabled = !isBackingUp) { onBackupNow() }
+                onClick = { if (!isBackingUp) onBackupNow() }
             )
-            HorizontalDivider()
-            ListItem(
-                headlineContent = { Text("Restore from Google Drive") },
-                supportingContent = { Text("Restore contacts & messages from backup") },
-                leadingContent = {
-                    Icon(Icons.Default.CloudDownload, contentDescription = null)
-                },
-                modifier = Modifier.clickable { onRestore() }
+            SettingsItem(
+                icon = Icons.Default.CloudDownload,
+                title = "Restore from Google Drive",
+                subtitle = "Restore contacts & messages from backup",
+                onClick = onRestore
             )
-            HorizontalDivider()
-            ListItem(
-                headlineContent = { Text("Sign Out") },
-                leadingContent = {
-                    Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = null)
-                },
-                modifier = Modifier.clickable { onSignOut() }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            SectionHeader("About")
+            Text(
+                text = "Squelch v1.0.0",
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            HorizontalDivider(
+                modifier = Modifier.padding(horizontal = 16.dp),
+                color = MaterialTheme.colorScheme.outlineVariant
+            )
+
+            SettingsItem(
+                icon = Icons.AutoMirrored.Filled.ExitToApp,
+                title = "Sign Out",
+                titleColor = MaterialTheme.colorScheme.error,
+                iconTint = MaterialTheme.colorScheme.error,
+                onClick = onSignOut
+            )
+
+            Spacer(modifier = Modifier.height(32.dp))
         }
     }
+}
+
+@Composable
+private fun ProfileCard(
+    displayName: String,
+    email: String,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .background(MaterialTheme.colorScheme.surface)
+            .padding(horizontal = 20.dp, vertical = 16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(56.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.primaryContainer),
+            contentAlignment = Alignment.Center
+        ) {
+            val initials = displayName
+                .split(" ")
+                .take(2)
+                .joinToString("") { it.firstOrNull()?.uppercase() ?: "" }
+            if (initials.isNotEmpty()) {
+                Text(
+                    text = initials,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    fontWeight = FontWeight.SemiBold
+                )
+            } else {
+                Icon(
+                    imageVector = Icons.Default.Person,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.size(28.dp)
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.width(16.dp))
+
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = displayName.ifEmpty { "Your Name" },
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            if (email.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = email,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        Icon(
+            imageVector = Icons.Default.Person,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(20.dp)
+        )
+    }
+}
+
+@Composable
+private fun SectionHeader(title: String) {
+    Text(
+        text = title.uppercase(),
+        style = MaterialTheme.typography.labelSmall.copy(
+            letterSpacing = 1.sp,
+            fontWeight = FontWeight.SemiBold
+        ),
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp)
+    )
+    HorizontalDivider(
+        modifier = Modifier.padding(horizontal = 16.dp),
+        color = MaterialTheme.colorScheme.outlineVariant
+    )
+}
+
+@Composable
+private fun SettingsItem(
+    icon: ImageVector,
+    title: String,
+    subtitle: String? = null,
+    trailing: @Composable (() -> Unit)? = null,
+    titleColor: Color = MaterialTheme.colorScheme.onSurface,
+    iconTint: Color = MaterialTheme.colorScheme.onSurfaceVariant,
+    onClick: (() -> Unit)? = null
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(
+                if (onClick != null) Modifier.clickable(onClick = onClick)
+                else Modifier
+            )
+            .padding(horizontal = 16.dp, vertical = 4.dp)
+            .height(if (subtitle != null) 64.dp else 48.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = iconTint,
+            modifier = Modifier.size(24.dp)
+        )
+
+        Spacer(modifier = Modifier.width(20.dp))
+
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                color = titleColor
+            )
+            if (subtitle != null) {
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        if (trailing != null) {
+            trailing()
+        } else if (onClick != null) {
+            Spacer(modifier = Modifier.width(8.dp))
+        }
+    }
+
+    HorizontalDivider(
+        modifier = Modifier.padding(start = 56.dp, end = 16.dp),
+        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+    )
 }

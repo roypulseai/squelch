@@ -37,6 +37,16 @@ class MessageRelay @Inject constructor() {
 
     val isRunning: Boolean get() = transport != null
 
+    suspend fun getContactName(db: SquelchDatabase): String {
+        return try {
+            val contact = db.contacts().get(selfEdPubHex)
+            contact?.displayName?.ifEmpty { contact.callsign.ifEmpty { selfEdPubHex.take(8) } }
+                ?: selfEdPubHex.take(8)
+        } catch (_: Exception) {
+            selfEdPubHex.take(8)
+        }
+    }
+
     fun start(edPubHex: String, database: SquelchDatabase, identity: Identity) {
         if (transport != null) {
             Log.d(TAG, "Already running for $edPubHex")
@@ -142,6 +152,12 @@ class MessageRelay @Inject constructor() {
         db: SquelchDatabase
     ) {
         if (senderEdPubHex == selfEdPubHex) return
+
+        val blockedPubkeys = try { db.blocked().allPubkeys() } catch (_: Exception) { emptyList() }
+        if (senderEdPubHex in blockedPubkeys) {
+            Log.d(TAG, "Ignoring blocked sender $senderEdPubHex")
+            return
+        }
 
         val plaintext = String(payload, Charsets.UTF_8)
         val conversationId = senderEdPubHex

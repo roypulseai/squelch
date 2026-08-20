@@ -32,6 +32,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.squelch.app.auth.AuthRepository
 import com.squelch.app.auth.AuthState
 import com.squelch.app.crypto.Identity
@@ -41,11 +42,15 @@ import com.squelch.app.data.remote.DriveBackupManager
 import com.squelch.app.data.remote.FirestoreVaultManager
 import com.squelch.app.data.repository.VaultRepository
 import com.squelch.app.data.repository.VaultRepository.VaultState
+import com.squelch.app.messaging.MessageForegroundService
 import com.squelch.app.mesh.relay.MessageRelay
 import com.squelch.app.qr.QrContact
 import com.squelch.app.ui.screens.chats.ChatsScreen
 import com.squelch.app.ui.screens.chats.ConversationScreen
+import com.squelch.app.ui.screens.chats.CreateGroupScreen
 import com.squelch.app.ui.screens.chats.NewChatScreen
+import com.squelch.app.ui.screens.chats.StrangerMessagesScreen
+import com.squelch.app.ui.screens.chats.ChatViewModel
 import com.squelch.app.ui.screens.contacts.AddContactScreen
 import com.squelch.app.ui.screens.contacts.ContactsScreen
 import com.squelch.app.ui.screens.contacts.MyQrScreen
@@ -154,6 +159,11 @@ fun AppEntry(
                     if (!messageRelay.isRunning) {
                         messageRelay.start(edPubHex, db, identity)
                     }
+                    if (!MessageForegroundService.isRunning) {
+                        android.content.Intent(activity, MessageForegroundService::class.java)
+                            .putExtra("edPubHex", edPubHex)
+                            .also { activity.startForegroundService(it) }
+                    }
                 }
                 val current = navController.currentDestination?.route
                 if (current == Screen.SignIn.route || current == Screen.Unlock.route) {
@@ -171,6 +181,9 @@ fun AppEntry(
             else -> {
                 if (messageRelay.isRunning) {
                     messageRelay.stop()
+                }
+                if (MessageForegroundService.isRunning) {
+                    MessageForegroundService.stop(activity)
                 }
             }
         }
@@ -283,13 +296,20 @@ fun AppEntry(
                 }
 
                 composable(Screen.Chats.route) {
+                    val chatViewModel: ChatViewModel = hiltViewModel()
+                    val strangerList by chatViewModel.strangers.collectAsState()
                     ChatsScreen(
                         onNavigateToConversation = { id, name ->
-                            navController.navigate(Screen.Conversation.createRoute(id, name))
+                            navController.navigate(Screen.Conversation.createRoute(id, name, false))
                         },
                         onNavigateToNewChat = {
                             navController.navigate(Screen.NewChat.route)
-                        }
+                        },
+                        onNavigateToStrangers = {
+                            navController.navigate(Screen.Strangers.route)
+                        },
+                        strangerCount = strangerList.size,
+                        viewModel = chatViewModel
                     )
                 }
 
@@ -315,9 +335,42 @@ fun AppEntry(
                                     }
                                 }
                             }
-                            navController.navigate(Screen.Conversation.createRoute(convId, convName)) {
+                            navController.navigate(Screen.Conversation.createRoute(convId, convName, false)) {
                                 popUpTo(Screen.NewChat.route) { inclusive = true }
                             }
+                        },
+                        onNewGroup = {
+                            navController.navigate(Screen.NewGroup.route)
+                        }
+                    )
+                }
+
+                composable(Screen.NewGroup.route) {
+                    val chatViewModel: ChatViewModel = hiltViewModel()
+                    CreateGroupScreen(
+                        contacts = contacts,
+                        onBack = { navController.popBackStack() },
+                        onGroupCreated = { name, memberPubKeys ->
+                            chatViewModel.createGroup(name, memberPubKeys)
+                            navController.popBackStack()
+                        }
+                    )
+                }
+
+                composable(Screen.Strangers.route) {
+                    val chatViewModel: ChatViewModel = hiltViewModel()
+                    val strangers by chatViewModel.strangers.collectAsState()
+                    StrangerMessagesScreen(
+                        strangers = strangers,
+                        onBack = { navController.popBackStack() },
+                        onOpenChat = { senderEdPubHex, senderName ->
+                            navController.navigate(Screen.Conversation.createRoute(senderEdPubHex, senderName, false))
+                        },
+                        onAddContact = { edPub, name ->
+                            navController.navigate(Screen.UserSearch.route)
+                        },
+                        onBlock = { edPub ->
+                            chatViewModel.blockSender(edPub)
                         }
                     )
                 }
@@ -326,11 +379,13 @@ fun AppEntry(
                     route = Screen.Conversation.route,
                     arguments = listOf(
                         navArgument("conversationId") { type = NavType.StringType },
-                        navArgument("conversationName") { type = NavType.StringType }
+                        navArgument("conversationName") { type = NavType.StringType },
+                        navArgument("isGroup") { type = NavType.BoolType; defaultValue = false }
                     )
                 ) { backStackEntry ->
                     val conversationId = backStackEntry.arguments?.getString("conversationId") ?: ""
                     val conversationName = backStackEntry.arguments?.getString("conversationName") ?: ""
+                    val isGroup = backStackEntry.arguments?.getBoolean("isGroup") ?: false
                     val signed = authRepository.signedIn()
                     val selfPubkey = signed?.let {
                         Identity.fromGoogleUid(it.googleUid).edPub.toHex()
@@ -352,6 +407,7 @@ fun AppEntry(
                         conversationName = conversationName,
                         selfPubkey = selfPubkey,
                         recipientUid = recipientUid,
+                        isGroup = isGroup,
                         onBack = { navController.popBackStack() }
                     )
                 }

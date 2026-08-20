@@ -1,17 +1,10 @@
 package com.squelch.app.messaging
 
 import android.util.Log
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
-import com.squelch.app.crypto.E2ECrypto
-import com.squelch.app.crypto.Identity
-import com.squelch.app.crypto.VaultSession
-import com.squelch.app.data.local.SquelchDatabase
 import com.squelch.app.data.local.entity.ConversationEntity
 import com.squelch.app.data.local.entity.MessageEntity
-import com.squelch.app.util.toHex
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -37,27 +30,25 @@ class SquelchMessagingService : FirebaseMessagingService() {
         Log.d(TAG, "Push received: ${message.data}")
 
         val data = message.data
-        val senderEdPubHex = data["senderEdPub"] ?: return
-        val payloadCt = data["payload"] ?: return
-        val conversationId = data["conversationId"] ?: senderEdPubHex
-        val senderName = data["senderName"] ?: senderEdPubHex.take(8)
         val type = data["type"] ?: "message"
 
         when (type) {
             "message" -> {
-                val title = data["title"] ?: senderName
-                val body = data["body"] ?: "New message"
-                showNotification(title, body, conversationId)
+                val senderEdPub = data["senderEdPub"] ?: return
+                val senderName = data["senderName"] ?: senderEdPub.take(8)
+                val body = data["body"] ?: return
+                val conversationId = data["conversationId"] ?: senderEdPub
+
+                showNotification(senderName, body, conversationId)
 
                 val db = MessageRelayHolder.database ?: return
                 scope.launch {
                     try {
-                        val plaintext = payloadCt.toByteArray(Charsets.UTF_8)
                         val msg = MessageEntity(
                             conversationId = conversationId,
                             msgId = UUID.randomUUID().toString(),
-                            sender = senderEdPubHex,
-                            body = String(plaintext, Charsets.UTF_8),
+                            sender = senderEdPub,
+                            body = body,
                             timestamp = System.currentTimeMillis(),
                             direction = 0,
                             delivery = 1,
@@ -71,7 +62,7 @@ class SquelchMessagingService : FirebaseMessagingService() {
                                 ConversationEntity(
                                     id = conversationId,
                                     name = senderName,
-                                    lastMessagePreview = String(plaintext, Charsets.UTF_8).take(80),
+                                    lastMessagePreview = body.take(80),
                                     lastMessageTimestamp = msg.timestamp,
                                     unreadCount = 1
                                 )
@@ -79,14 +70,14 @@ class SquelchMessagingService : FirebaseMessagingService() {
                         } else {
                             db.conversations().updateLastMessage(
                                 id = conversationId,
-                                preview = String(plaintext, Charsets.UTF_8).take(80),
+                                preview = body.take(80),
                                 timestamp = msg.timestamp
                             )
                             db.conversations().incrementUnread(conversationId)
                         }
-                        Log.d(TAG, "Message stored from push: $senderName")
+                        Log.d(TAG, "Stored push message from $senderName")
                     } catch (e: Exception) {
-                        Log.e(TAG, "Failed to store push message: ${e.message}")
+                        Log.e(TAG, "Store push message failed: ${e.message}")
                     }
                 }
             }
@@ -94,24 +85,14 @@ class SquelchMessagingService : FirebaseMessagingService() {
                 val msgId = data["msgId"] ?: return
                 val db = MessageRelayHolder.database ?: return
                 scope.launch {
-                    try {
-                        db.messages().updateDelivery(msgId, 1)
-                        Log.d(TAG, "Delivery acknowledged for $msgId")
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Failed to update delivery: ${e.message}")
-                    }
+                    try { db.messages().updateDelivery(msgId, 1) } catch (_: Exception) {}
                 }
             }
             "read_ack" -> {
                 val msgId = data["msgId"] ?: return
                 val db = MessageRelayHolder.database ?: return
                 scope.launch {
-                    try {
-                        db.messages().markRead(msgId, System.currentTimeMillis())
-                        Log.d(TAG, "Read acknowledged for $msgId")
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Failed to update read: ${e.message}")
-                    }
+                    try { db.messages().markRead(msgId, System.currentTimeMillis()) } catch (_: Exception) {}
                 }
             }
         }
@@ -148,93 +129,5 @@ class SquelchMessagingService : FirebaseMessagingService() {
 }
 
 object MessageRelayHolder {
-    var database: SquelchDatabase? = null
-}
-
-object FcmTokenManager {
-    private const val TAG = "FcmTokenManager"
-    private val firestore = FirebaseFirestore.getInstance()
-
-    fun registerToken(token: String) {
-        val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return
-        firestore.collection("users").document(uid)
-            .update("fcmToken", token, "fcmUpdatedAt", com.google.firebase.Timestamp.now())
-            .addOnSuccessListener { Log.d(TAG, "FCM token registered for $uid") }
-            .addOnFailureListener { e ->
-                Log.e(TAG, "FCM token registration failed: ${e.message}")
-                firestore.collection("users").document(uid)
-                    .set(
-                        mapOf("fcmToken" to token, "fcmUpdatedAt" to com.google.firebase.Timestamp.now()),
-                        com.google.firebase.firestore.SetOptions.merge()
-                    )
-            }
-    }
-
-    fun sendPushNotification(
-        recipientUid: String,
-        senderEdPubHex: String,
-        senderName: String,
-        body: String,
-        payloadCt: String,
-        conversationId: String,
-        type: String = "message"
-    ) {
-        firestore.collection("users").document(recipientUid)
-            .get()
-            .addOnSuccessListener { doc ->
-                val fcmToken = doc.getString("fcmToken")
-                if (fcmToken == null) {
-                    Log.w(TAG, "No FCM token for $recipientUid")
-                    return@addOnSuccessListener
-                }
-
-                val message = mapOf(
-                    "token" to fcmToken,
-                    "data" to mapOf(
-                        "senderEdPub" to senderEdPubHex,
-                        "senderName" to senderName,
-                        "body" to body,
-                        "payload" to payloadCt,
-                        "conversationId" to conversationId,
-                        "type" to type
-                    )
-                )
-
-                firestore.collection("push_queue").add(message)
-                    .addOnSuccessListener { Log.d(TAG, "Push queued for $recipientUid") }
-                    .addOnFailureListener { e -> Log.e(TAG, "Push queue failed: ${e.message}") }
-            }
-    }
-
-    fun sendDeliveryAck(senderUid: String, msgId: String) {
-        firestore.collection("users").document(senderUid)
-            .get()
-            .addOnSuccessListener { doc ->
-                val fcmToken = doc.getString("fcmToken") ?: return@addOnSuccessListener
-                val message = mapOf(
-                    "token" to fcmToken,
-                    "data" to mapOf(
-                        "type" to "delivery_ack",
-                        "msgId" to msgId
-                    )
-                )
-                firestore.collection("push_queue").add(message)
-            }
-    }
-
-    fun sendReadAck(senderUid: String, msgId: String) {
-        firestore.collection("users").document(senderUid)
-            .get()
-            .addOnSuccessListener { doc ->
-                val fcmToken = doc.getString("fcmToken") ?: return@addOnSuccessListener
-                val message = mapOf(
-                    "token" to fcmToken,
-                    "data" to mapOf(
-                        "type" to "read_ack",
-                        "msgId" to msgId
-                    )
-                )
-                firestore.collection("push_queue").add(message)
-            }
-    }
+    var database: com.squelch.app.data.local.SquelchDatabase? = null
 }
