@@ -28,6 +28,7 @@ import com.squelch.app.data.repository.VaultRepository
 import com.squelch.app.data.repository.VaultRepository.VaultState
 import com.squelch.app.crypto.VaultSession
 import com.squelch.app.qr.QrContact
+import com.squelch.app.util.toHex
 import com.squelch.app.ui.screens.chats.ChatsScreen
 import com.squelch.app.ui.screens.chats.ConversationScreen
 import com.squelch.app.ui.screens.chats.NewChatScreen
@@ -188,9 +189,10 @@ fun AppEntry(
                 val signed = authRepository.signedIn()
                 val selfContact = remember(signed) {
                     val uid = VaultSession.googleUidOrNull() ?: ""
+                    val identity = if (uid.isNotEmpty()) com.squelch.app.crypto.Identity.fromGoogleUid(uid) else null
                     QrContact(
-                        edPub = uid,
-                        xPub = "",
+                        edPub = identity?.edPub?.toHex() ?: uid,
+                        xPub = identity?.xPub?.toHex() ?: "",
                         callsign = signed?.displayName?.take(12) ?: "Unknown",
                         displayName = signed?.displayName ?: signed?.email ?: ""
                     )
