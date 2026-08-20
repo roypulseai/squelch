@@ -39,6 +39,7 @@ fun ConversationScreen(
     conversationId: String,
     conversationName: String,
     selfPubkey: String,
+    recipientUid: String = "",
     onBack: () -> Unit = {},
     viewModel: ChatViewModel = hiltViewModel()
 ) {
@@ -50,6 +51,10 @@ fun ConversationScreen(
         if (messages.isNotEmpty()) {
             listState.animateScrollToItem(messages.lastIndex)
         }
+    }
+
+    LaunchedEffect(conversationId) {
+        viewModel.clearUnread(conversationId)
     }
 
     Scaffold(
@@ -103,7 +108,12 @@ fun ConversationScreen(
                 IconButton(
                     onClick = {
                         if (inputText.isNotBlank()) {
-                            viewModel.sendMessage(conversationId, selfPubkey, inputText.trim())
+                            viewModel.sendMessage(
+                                conversationId = conversationId,
+                                recipientUid = recipientUid,
+                                senderName = conversationName,
+                                plaintext = inputText.trim()
+                            )
                             inputText = ""
                         }
                     }
@@ -137,12 +147,28 @@ private fun MessageBubble(msg: MessageEntity, isSelf: Boolean) {
                 style = MaterialTheme.typography.bodyMedium,
                 color = textColor
             )
-            Text(
-                text = formatTime(msg.timestamp),
-                style = MaterialTheme.typography.labelSmall,
-                color = textColor.copy(alpha = 0.6f),
-                modifier = Modifier.padding(top = 2.dp)
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = formatTime(msg.timestamp),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = textColor.copy(alpha = 0.6f),
+                    modifier = Modifier.padding(top = 2.dp)
+                )
+                if (isSelf) {
+                    Text(
+                        text = when (msg.delivery) {
+                            0 -> "  •"
+                            1 -> "  ••"
+                            2 -> "  ✓✓"
+                            else -> ""
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (msg.delivery >= 2) MaterialTheme.colorScheme.primary
+                        else textColor.copy(alpha = 0.6f),
+                        modifier = Modifier.padding(start = 4.dp)
+                    )
+                }
+            }
         }
     }
 }

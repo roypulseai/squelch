@@ -35,54 +35,84 @@ class ChatViewModel @Inject constructor(
 
     fun messages(conversationId: String): StateFlow<List<MessageEntity>> =
         messageFlows.getOrPut(conversationId) {
-            val db = vaultRepository.db
-            val flow = db?.messages()?.observeByConversation(conversationId)
+            val flow = vaultRepository.db?.messages()?.observeByConversation(conversationId)
                 ?: flowOf(emptyList())
             flow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
         }
 
-    fun sendMessage(conversationId: String, senderEdPubHex: String, plaintext: String) {
+    fun sendMessage(
+        conversationId: String,
+        recipientUid: String,
+        senderName: String,
+        plaintext: String
+    ) {
         viewModelScope.launch {
-            val db = vaultRepository.db ?: return@launch
+            val database = vaultRepository.db ?: return@launch
 
             val msg = MessageEntity(
                 conversationId = conversationId,
                 msgId = UUID.randomUUID().toString(),
-                sender = senderEdPubHex,
+                sender = messageRelay.selfEdPubHex,
                 body = plaintext,
                 timestamp = System.currentTimeMillis(),
                 direction = 1,
                 delivery = 0,
                 kind = 2
             )
-            db.messages().insert(msg)
-            db.conversations().updateLastMessage(
-                id = conversationId,
-                preview = plaintext.take(80),
-                timestamp = msg.timestamp
-            )
+            database.messages().insert(msg)
 
-            if (messageRelay.isRunning) {
-                messageRelay.send(
-                    recipientEdPubHex = conversationId,
-                    plaintext = plaintext,
-                    senderEdPubHex = senderEdPubHex
+            val existingConv = database.conversations().get(conversationId)
+            if (existingConv == null) {
+                database.conversations().upsert(
+                    ConversationEntity(
+                        id = conversationId,
+                        name = senderName,
+                        lastMessagePreview = plaintext.take(80),
+                        lastMessageTimestamp = msg.timestamp,
+                        unreadCount = 0
+                    )
                 )
             } else {
-                Log.w("ChatViewModel", "MessageRelay not running, message stored locally only")
+                database.conversations().updateLastMessage(
+                    id = conversationId,
+                    preview = plaintext.take(80),
+                    timestamp = msg.timestamp
+                )
+            }
+
+            if (messageRelay.isRunning) {
+                messageRelay.sendMessage(
+                    recipientEdPubHex = conversationId,
+                    recipientUid = recipientUid,
+                    senderName = senderName,
+                    plaintext = plaintext,
+                    db = database
+                )
+            } else {
+                Log.w("ChatViewModel", "MessageRelay not running, stored locally only")
             }
         }
     }
 
     fun createConversation(id: String, name: String) {
         viewModelScope.launch {
-            vaultRepository.db?.conversations()?.upsert(
-                ConversationEntity(
-                    id = id,
-                    name = name,
-                    lastMessageTimestamp = System.currentTimeMillis()
+            val database = vaultRepository.db ?: return@launch
+            val existing = database.conversations().get(id)
+            if (existing == null) {
+                database.conversations().upsert(
+                    ConversationEntity(
+                        id = id,
+                        name = name,
+                        lastMessageTimestamp = System.currentTimeMillis()
+                    )
                 )
-            )
+            }
+        }
+    }
+
+    fun clearUnread(conversationId: String) {
+        viewModelScope.launch {
+            vaultRepository.db?.conversations()?.clearUnread(conversationId)
         }
     }
 }

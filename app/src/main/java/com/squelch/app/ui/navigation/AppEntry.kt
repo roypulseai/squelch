@@ -123,6 +123,10 @@ fun AppEntry(
     LaunchedEffect(isSignedIn) {
         if (isSignedIn) {
             writeUserProfile(authRepository)
+            com.google.firebase.messaging.FirebaseMessaging.getInstance().token
+                .addOnSuccessListener { token ->
+                    com.squelch.app.messaging.FcmTokenManager.registerToken(token)
+                }
         }
     }
 
@@ -148,7 +152,7 @@ fun AppEntry(
                     val identity = Identity.fromGoogleUid(signed.googleUid)
                     val edPubHex = identity.edPub.toHex()
                     if (!messageRelay.isRunning) {
-                        messageRelay.start(edPubHex, db)
+                        messageRelay.start(edPubHex, db, identity)
                     }
                 }
                 val current = navController.currentDestination?.route
@@ -296,6 +300,21 @@ fun AppEntry(
                         onContactSelected = { contact ->
                             val convId = contact.pubkey
                             val convName = contact.callsign.ifEmpty { contact.displayName }
+                            MainScope().launch {
+                                withContext(Dispatchers.IO) {
+                                    val db = vaultRepository.db ?: return@withContext
+                                    val existing = db.conversations().get(convId)
+                                    if (existing == null) {
+                                        db.conversations().upsert(
+                                            com.squelch.app.data.local.entity.ConversationEntity(
+                                                id = convId,
+                                                name = convName,
+                                                lastMessageTimestamp = System.currentTimeMillis()
+                                            )
+                                        )
+                                    }
+                                }
+                            }
                             navController.navigate(Screen.Conversation.createRoute(convId, convName)) {
                                 popUpTo(Screen.NewChat.route) { inclusive = true }
                             }
@@ -317,10 +336,22 @@ fun AppEntry(
                         Identity.fromGoogleUid(it.googleUid).edPub.toHex()
                     } ?: ""
 
+                    val recipientUid = remember(conversationId) {
+                        var uid = ""
+                        kotlinx.coroutines.runBlocking {
+                            try {
+                                val contact = vaultRepository.db?.contacts()?.get(conversationId)
+                                uid = contact?.firebaseUid ?: ""
+                            } catch (_: Exception) {}
+                        }
+                        uid
+                    }
+
                     ConversationScreen(
                         conversationId = conversationId,
                         conversationName = conversationName,
                         selfPubkey = selfPubkey,
+                        recipientUid = recipientUid,
                         onBack = { navController.popBackStack() }
                     )
                 }
@@ -365,6 +396,7 @@ fun AppEntry(
                                     vaultRepository.db?.contacts()?.upsert(
                                         ContactEntity(
                                             pubkey = result.edPub,
+                                            firebaseUid = result.googleUid,
                                             xPub = result.xPub,
                                             callsign = result.displayName,
                                             displayName = result.displayName,

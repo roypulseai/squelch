@@ -4,7 +4,6 @@ import android.util.Base64
 import android.util.Log
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
-import com.google.firebase.firestore.Query
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -21,7 +20,6 @@ class FirestoreTransport(
     companion object {
         private const val TAG = "FirestoreTransport"
         private const val COLLECTION = "messages"
-        private const val BATCH_SIZE = 50
     }
 
     override val name: String = "Firestore"
@@ -41,24 +39,39 @@ class FirestoreTransport(
             return
         }
         scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        Log.d(TAG, "Starting listener for recipient=$edPubHex")
+
         listener = db!!.collection(COLLECTION)
             .whereEqualTo("recipient", edPubHex)
-            .orderBy("timestamp", Query.Direction.DESCENDING)
-            .limit(BATCH_SIZE.toLong())
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    Log.e(TAG, "Firestore listener error: ${error.message}")
+                    Log.e(TAG, "Firestore listener error: ${error.message}", error)
                     return@addSnapshotListener
                 }
-                snapshot?.documents?.forEach { doc ->
-                    val sender = doc.getString("sender") ?: return@forEach
-                    if (sender == edPubHex) return@forEach
 
-                    val payloadB64 = doc.getString("payload") ?: return@forEach
-                    val kind = (doc.getLong("kind") ?: Transport.TransportFrame.KIND_DATA).toInt()
+                val docs = snapshot?.documents
+                if (docs.isNullOrEmpty()) {
+                    Log.d(TAG, "Listener fired: 0 documents")
+                    return@addSnapshotListener
+                }
+                Log.d(TAG, "Listener fired: ${docs.size} documents")
 
+                for (doc in docs) {
                     try {
+                        val sender = doc.getString("sender") ?: continue
+                        if (sender == edPubHex) {
+                            doc.reference.delete()
+                            continue
+                        }
+
+                        val payloadB64 = doc.getString("payload") ?: continue
                         val payload = Base64.decode(payloadB64, Base64.NO_WRAP)
+                        val senderName = doc.getString("senderName") ?: sender.take(8)
+                        val recipientUid = doc.getString("recipientUid") ?: ""
+                        val kind = (doc.getLong("kind") ?: Transport.TransportFrame.KIND_DATA).toInt()
+
+                        Log.d(TAG, "Incoming from $sender ($senderName), ${payload.size} bytes")
+
                         scope?.launch {
                             _incoming.emit(
                                 Transport.TransportFrame(
@@ -67,19 +80,18 @@ class FirestoreTransport(
                                     payload = payload
                                 )
                             )
+                            Log.d(TAG, "Emitted frame from $sender")
                         }
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Failed to decode message: ${e.message}")
-                    }
 
-                    try {
                         doc.reference.delete()
+                            .addOnSuccessListener { Log.d(TAG, "Deleted consumed doc") }
+                            .addOnFailureListener { e -> Log.e(TAG, "Delete failed: ${e.message}") }
                     } catch (e: Exception) {
-                        Log.e(TAG, "Failed to delete message: ${e.message}")
+                        Log.e(TAG, "Process doc failed: ${e.message}", e)
                     }
                 }
             }
-        Log.d(TAG, "Firestore transport started, listening for messages to $edPubHex")
+        Log.d(TAG, "Firestore transport started for $edPubHex")
     }
 
     override fun stop() {
@@ -91,16 +103,58 @@ class FirestoreTransport(
     }
 
     override fun send(recipientEdPubHex: String, payload: ByteArray) {
-        val fireDb = db ?: return
+        val fireDb = db ?: run {
+            Log.e(TAG, "Cannot send: Firestore not initialized")
+            return
+        }
         val data = mapOf(
             "sender" to edPubHex,
             "recipient" to recipientEdPubHex,
             "payload" to Base64.encodeToString(payload, Base64.NO_WRAP),
-            "timestamp" to com.google.firebase.Timestamp.now()
+            "timestamp" to com.google.firebase.Timestamp.now(),
+            "kind" to Transport.TransportFrame.KIND_DATA
         )
+        Log.d(TAG, "Sending to $recipientEdPubHex (${payload.size} bytes)")
         fireDb.collection(COLLECTION)
             .add(data)
-            .addOnSuccessListener { Log.d(TAG, "Message sent to $recipientEdPubHex") }
-            .addOnFailureListener { e -> Log.e(TAG, "Send failed: ${e.message}") }
+            .addOnSuccessListener { Log.d(TAG, "Sent successfully") }
+            .addOnFailureListener { e -> Log.e(TAG, "Send failed: ${e.message}", e) }
+    }
+
+    fun sendWithMeta(
+        recipientEdPubHex: String,
+        recipientUid: String,
+        senderName: String,
+        payload: ByteArray
+    ) {
+        val fireDb = db ?: run {
+            Log.e(TAG, "Cannot send: Firestore not initialized")
+            return
+        }
+        val data = mapOf(
+            "sender" to edPubHex,
+            "recipient" to recipientEdPubHex,
+            "recipientUid" to recipientUid,
+            "senderName" to senderName,
+            "payload" to Base64.encodeToString(payload, Base64.NO_WRAP),
+            "timestamp" to com.google.firebase.Timestamp.now(),
+            "kind" to Transport.TransportFrame.KIND_DATA
+        )
+        Log.d(TAG, "Sending with meta to $recipientEdPubHex (uid=$recipientUid)")
+        fireDb.collection(COLLECTION)
+            .add(data)
+            .addOnSuccessListener { Log.d(TAG, "Sent with meta successfully") }
+            .addOnFailureListener { e -> Log.e(TAG, "Send with meta failed: ${e.message}", e) }
+    }
+
+    fun sendDeliveryAck(senderEdPubHex: String, msgId: String) {
+        val fireDb = db ?: return
+        fireDb.collection("delivery_acks").add(
+            mapOf(
+                "senderEdPub" to senderEdPubHex,
+                "msgId" to msgId,
+                "timestamp" to com.google.firebase.Timestamp.now()
+            )
+        )
     }
 }

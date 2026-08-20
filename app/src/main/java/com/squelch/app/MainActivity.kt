@@ -1,5 +1,6 @@
 package com.squelch.app
 
+import android.content.Intent
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.compose.setContent
@@ -12,6 +13,7 @@ import com.squelch.app.auth.AuthRepository
 import com.squelch.app.data.remote.DriveBackupManager
 import com.squelch.app.data.remote.FirestoreVaultManager
 import com.squelch.app.data.repository.VaultRepository
+import com.squelch.app.messaging.MessageRelayHolder
 import com.squelch.app.mesh.relay.MessageRelay
 import com.squelch.app.ui.navigation.AppEntry
 import com.squelch.app.ui.theme.SquelchTheme
@@ -23,6 +25,8 @@ class MainActivity : FragmentActivity() {
 
     companion object {
         private const val TAG = "MainActivity"
+        var pendingConversationId: String? = null
+            private set
     }
 
     @Inject lateinit var authRepository: AuthRepository
@@ -34,6 +38,7 @@ class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Log.d(TAG, "onCreate start")
+        handleIntent(intent)
 
         try {
             setContent {
@@ -59,6 +64,19 @@ class MainActivity : FragmentActivity() {
                 val crashEntry = "\n--- ACTIVITY CRASH ---\n${Log.getStackTraceString(e)}\n"
                 SquelchApp.crashLogFile?.appendText(crashEntry)
             } catch (_: Exception) {}
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleIntent(intent)
+    }
+
+    private fun handleIntent(intent: Intent?) {
+        val conversationId = intent?.getStringExtra("conversationId")
+        if (conversationId != null) {
+            pendingConversationId = conversationId
+            Log.d(TAG, "Deep link to conversation: $conversationId")
         }
     }
 }
