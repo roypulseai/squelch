@@ -39,6 +39,7 @@ abstract class SquelchDatabase : RoomDatabase() {
 
         fun create(context: Context, kDb: ByteArray): SquelchDatabase {
             require(kDb.isNotEmpty()) { "K_db must not be empty" }
+            System.loadLibrary("sqlcipher")
             val factory = SupportOpenHelperFactory(kDb)
             return Room.databaseBuilder(
                 context.applicationContext,

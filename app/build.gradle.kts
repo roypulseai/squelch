@@ -80,6 +80,9 @@ android {
             excludes += "META-INF/NOTICE"
             excludes += "META-INF/NOTICE.txt"
         }
+        jniLibs {
+            useLegacyPackaging = true
+        }
     }
 }
 

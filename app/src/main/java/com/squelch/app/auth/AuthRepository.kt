@@ -32,11 +32,7 @@ class AuthRepository @Inject constructor(
 
     fun onSignInResult(data: Intent?) {
         val result = firebaseAuthManager.parseSignInResult(data)
-        if (result is AuthState.PendingGoogleAuth) {
-            _state.value = AuthState.SigningIn
-        } else {
-            _state.value = result
-        }
+        _state.value = result
     }
 
     suspend fun completeFirebaseAuth(idToken: String): AuthState {
