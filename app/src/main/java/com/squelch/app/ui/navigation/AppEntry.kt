@@ -41,6 +41,7 @@ import com.squelch.app.data.remote.DriveBackupManager
 import com.squelch.app.data.remote.FirestoreVaultManager
 import com.squelch.app.data.repository.VaultRepository
 import com.squelch.app.data.repository.VaultRepository.VaultState
+import com.squelch.app.mesh.relay.MessageRelay
 import com.squelch.app.qr.QrContact
 import com.squelch.app.ui.screens.chats.ChatsScreen
 import com.squelch.app.ui.screens.chats.ConversationScreen
@@ -75,7 +76,8 @@ fun AppEntry(
     authRepository: AuthRepository,
     vaultRepository: VaultRepository,
     driveBackupManager: DriveBackupManager,
-    firestoreVaultManager: FirestoreVaultManager
+    firestoreVaultManager: FirestoreVaultManager,
+    messageRelay: MessageRelay
 ) {
     val navController = rememberNavController()
     val authState by authRepository.state.collectAsState()
@@ -140,6 +142,15 @@ fun AppEntry(
     LaunchedEffect(vaultState) {
         when (vaultState) {
             is VaultState.Unlocked -> {
+                val signed = authRepository.signedIn()
+                val db = vaultRepository.db
+                if (signed != null && db != null) {
+                    val identity = Identity.fromGoogleUid(signed.googleUid)
+                    val edPubHex = identity.edPub.toHex()
+                    if (!messageRelay.isRunning) {
+                        messageRelay.start(edPubHex, db)
+                    }
+                }
                 val current = navController.currentDestination?.route
                 if (current == Screen.SignIn.route || current == Screen.Unlock.route) {
                     if (showRestore) {
@@ -153,7 +164,11 @@ fun AppEntry(
                     }
                 }
             }
-            else -> {}
+            else -> {
+                if (messageRelay.isRunning) {
+                    messageRelay.stop()
+                }
+            }
         }
     }
 
@@ -298,7 +313,9 @@ fun AppEntry(
                     val conversationId = backStackEntry.arguments?.getString("conversationId") ?: ""
                     val conversationName = backStackEntry.arguments?.getString("conversationName") ?: ""
                     val signed = authRepository.signedIn()
-                    val selfPubkey = signed?.googleUid ?: ""
+                    val selfPubkey = signed?.let {
+                        Identity.fromGoogleUid(it.googleUid).edPub.toHex()
+                    } ?: ""
 
                     ConversationScreen(
                         conversationId = conversationId,

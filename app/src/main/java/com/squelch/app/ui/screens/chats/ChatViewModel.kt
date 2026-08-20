@@ -1,11 +1,13 @@
 package com.squelch.app.ui.screens.chats
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.squelch.app.data.local.SquelchDatabase
 import com.squelch.app.data.local.entity.ConversationEntity
 import com.squelch.app.data.local.entity.MessageEntity
 import com.squelch.app.data.repository.VaultRepository
+import com.squelch.app.mesh.relay.MessageRelay
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -18,7 +20,8 @@ import javax.inject.Inject
 
 @HiltViewModel
 class ChatViewModel @Inject constructor(
-    private val vaultRepository: VaultRepository
+    private val vaultRepository: VaultRepository,
+    private val messageRelay: MessageRelay
 ) : ViewModel() {
 
     private val db: SquelchDatabase? get() = vaultRepository.db
@@ -38,13 +41,14 @@ class ChatViewModel @Inject constructor(
             flow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
         }
 
-    fun sendMessage(conversationId: String, sender: String, plaintext: String) {
+    fun sendMessage(conversationId: String, senderEdPubHex: String, plaintext: String) {
         viewModelScope.launch {
             val db = vaultRepository.db ?: return@launch
+
             val msg = MessageEntity(
                 conversationId = conversationId,
                 msgId = UUID.randomUUID().toString(),
-                sender = sender,
+                sender = senderEdPubHex,
                 body = plaintext,
                 timestamp = System.currentTimeMillis(),
                 direction = 1,
@@ -57,6 +61,16 @@ class ChatViewModel @Inject constructor(
                 preview = plaintext.take(80),
                 timestamp = msg.timestamp
             )
+
+            if (messageRelay.isRunning) {
+                messageRelay.send(
+                    recipientEdPubHex = conversationId,
+                    plaintext = plaintext,
+                    senderEdPubHex = senderEdPubHex
+                )
+            } else {
+                Log.w("ChatViewModel", "MessageRelay not running, message stored locally only")
+            }
         }
     }
 
@@ -69,29 +83,6 @@ class ChatViewModel @Inject constructor(
                     lastMessageTimestamp = System.currentTimeMillis()
                 )
             )
-        }
-    }
-
-    fun receiveMessage(conversationId: String, sender: String, body: String) {
-        viewModelScope.launch {
-            val db = vaultRepository.db ?: return@launch
-            val msg = MessageEntity(
-                conversationId = conversationId,
-                msgId = UUID.randomUUID().toString(),
-                sender = sender,
-                body = body,
-                timestamp = System.currentTimeMillis(),
-                direction = 0,
-                delivery = 1,
-                kind = 2
-            )
-            db.messages().insert(msg)
-            db.conversations().updateLastMessage(
-                id = conversationId,
-                preview = body.take(80),
-                timestamp = msg.timestamp
-            )
-            db.conversations().incrementUnread(conversationId)
         }
     }
 }
