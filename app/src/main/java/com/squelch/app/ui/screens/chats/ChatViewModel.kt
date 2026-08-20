@@ -7,10 +7,10 @@ import com.squelch.app.data.local.entity.ConversationEntity
 import com.squelch.app.data.local.entity.MessageEntity
 import com.squelch.app.data.repository.VaultRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.util.UUID
@@ -23,21 +23,24 @@ class ChatViewModel @Inject constructor(
 
     private val db: SquelchDatabase? get() = vaultRepository.db
 
-    val conversations: StateFlow<List<ConversationEntity>> by lazy {
-        val flow = db?.conversations()?.observeAll()
-            ?: MutableStateFlow(emptyList())
-        flow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-    }
+    val conversations: StateFlow<List<ConversationEntity>> =
+        vaultRepository.dbReady.flatMapLatest { db ->
+            db?.conversations()?.observeAll() ?: flowOf(emptyList())
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    fun messages(conversationId: String): StateFlow<List<MessageEntity>> {
-        val flow = db?.messages()?.observeByConversation(conversationId)
-            ?: MutableStateFlow(emptyList())
-        return flow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-    }
+    private val messageFlows = mutableMapOf<String, StateFlow<List<MessageEntity>>>()
+
+    fun messages(conversationId: String): StateFlow<List<MessageEntity>> =
+        messageFlows.getOrPut(conversationId) {
+            val db = vaultRepository.db
+            val flow = db?.messages()?.observeByConversation(conversationId)
+                ?: flowOf(emptyList())
+            flow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        }
 
     fun sendMessage(conversationId: String, sender: String, plaintext: String) {
         viewModelScope.launch {
-            val db = db ?: return@launch
+            val db = vaultRepository.db ?: return@launch
             val msg = MessageEntity(
                 conversationId = conversationId,
                 msgId = UUID.randomUUID().toString(),
@@ -59,7 +62,7 @@ class ChatViewModel @Inject constructor(
 
     fun createConversation(id: String, name: String) {
         viewModelScope.launch {
-            db?.conversations()?.upsert(
+            vaultRepository.db?.conversations()?.upsert(
                 ConversationEntity(
                     id = id,
                     name = name,
@@ -71,7 +74,7 @@ class ChatViewModel @Inject constructor(
 
     fun receiveMessage(conversationId: String, sender: String, body: String) {
         viewModelScope.launch {
-            val db = db ?: return@launch
+            val db = vaultRepository.db ?: return@launch
             val msg = MessageEntity(
                 conversationId = conversationId,
                 msgId = UUID.randomUUID().toString(),

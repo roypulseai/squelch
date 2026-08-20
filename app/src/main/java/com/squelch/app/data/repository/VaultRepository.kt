@@ -14,10 +14,13 @@ import com.squelch.app.data.remote.FirestoreVaultManager
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -44,7 +47,13 @@ class VaultRepository @Inject constructor(
     private val _state = MutableStateFlow<VaultState>(VaultState.Idle)
     val state: StateFlow<VaultState> = _state.asStateFlow()
 
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val vaultMutex = Mutex()
+
+    @Volatile
     private var database: SquelchDatabase? = null
+    private val _dbReady = MutableStateFlow<SquelchDatabase?>(null)
+    val dbReady: StateFlow<SquelchDatabase?> = _dbReady.asStateFlow()
 
     val db: SquelchDatabase? get() = database
     val isUnlocked: Boolean get() = VaultSession.isUnlocked
@@ -54,63 +63,61 @@ class VaultRepository @Inject constructor(
         val signed = authRepository.signedIn() ?: return
         _state.value = VaultState.Loading
 
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
-                val googleUid = signed.googleUid
-                val hasVault = firestoreVaultManager.hasVault(googleUid)
-                val lockEnabled = biometricVaultManager.isLockEnabled()
+        scope.launch {
+            vaultMutex.withLock {
+                try {
+                    val googleUid = signed.googleUid
+                    val hasVault = firestoreVaultManager.hasVault(googleUid)
+                    val lockEnabled = biometricVaultManager.isLockEnabled()
 
-                if (!hasVault) {
-                    provisionVault(googleUid)
-                } else if (lockEnabled && biometricVaultManager.hasCachedKey()) {
-                    _state.value = VaultState.BiometricRequired
-                } else if (lockEnabled) {
-                    _state.value = VaultState.BiometricRequired
-                } else {
-                    autoUnlock(googleUid)
+                    if (!hasVault) {
+                        provisionVault(googleUid)
+                    } else if (lockEnabled) {
+                        _state.value = VaultState.BiometricRequired
+                    } else {
+                        autoUnlock(googleUid)
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "checkVaultState failed: ${e.message}", e)
+                    _state.value = VaultState.Error(e.message ?: "Failed to load vault")
                 }
-            } catch (e: Exception) {
-                Log.e(TAG, "checkVaultState failed: ${e.message}", e)
-                _state.value = VaultState.Error(e.message ?: "Failed to load vault")
             }
         }
     }
 
-    private fun provisionVault(googleUid: String) {
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
-                val payload = VaultPayload()
-                val ciphertext = VaultCipher.encryptVault(googleUid, payload)
-                firestoreVaultManager.uploadVault(googleUid, ciphertext)
+    private suspend fun provisionVault(googleUid: String) {
+        try {
+            val payload = VaultPayload()
+            val ciphertext = VaultCipher.encryptVault(googleUid, payload)
+            firestoreVaultManager.uploadVault(googleUid, ciphertext)
 
-                val kDb = VaultCipher.deriveKDb(googleUid)
-                VaultSession.unlock(kDb = kDb, googleUid = googleUid)
-                database = SquelchDatabase.create(context, kDb)
+            val kDb = VaultCipher.deriveKDb(googleUid)
+            VaultSession.unlock(kDb = kDb, googleUid = googleUid)
+            database = SquelchDatabase.create(context, kDb)
+            _dbReady.value = database
 
-                _state.value = VaultState.Unlocked
-            } catch (e: Exception) {
-                Log.e(TAG, "provisionVault failed: ${e.message}", e)
-                _state.value = VaultState.Error("Setup failed: ${e.message}")
-            }
+            _state.value = VaultState.Unlocked
+        } catch (e: Exception) {
+            Log.e(TAG, "provisionVault failed: ${e.message}", e)
+            _state.value = VaultState.Error("Setup failed: ${e.message}")
         }
     }
 
-    private fun autoUnlock(googleUid: String) {
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
-                val blob = firestoreVaultManager.downloadVault(googleUid)
-                    ?: throw IllegalStateException("Vault not found")
+    private suspend fun autoUnlock(googleUid: String) {
+        try {
+            val blob = firestoreVaultManager.downloadVault(googleUid)
+                ?: throw IllegalStateException("Vault not found")
 
-                VaultCipher.decryptVault(googleUid, blob)
-                val kDb = VaultCipher.deriveKDb(googleUid)
-                VaultSession.unlock(kDb = kDb, googleUid = googleUid)
-                database = SquelchDatabase.create(context, kDb)
+            VaultCipher.decryptVault(googleUid, blob)
+            val kDb = VaultCipher.deriveKDb(googleUid)
+            VaultSession.unlock(kDb = kDb, googleUid = googleUid)
+            database = SquelchDatabase.create(context, kDb)
+            _dbReady.value = database
 
-                _state.value = VaultState.Unlocked
-            } catch (e: Exception) {
-                Log.e(TAG, "autoUnlock failed: ${e.message}", e)
-                _state.value = VaultState.Error("Unlock failed: ${e.message}")
-            }
+            _state.value = VaultState.Unlocked
+        } catch (e: Exception) {
+            Log.e(TAG, "autoUnlock failed: ${e.message}", e)
+            _state.value = VaultState.Error("Unlock failed: ${e.message}")
         }
     }
 
@@ -134,6 +141,7 @@ class VaultRepository @Inject constructor(
                         val googleUid = authRepository.signedIn()?.googleUid ?: return@authenticateWithCipher
                         VaultSession.unlock(kDb = kDb, googleUid = googleUid)
                         database = SquelchDatabase.create(context, kDb)
+                        _dbReady.value = database
                         _state.value = VaultState.Unlocked
                     } catch (e: Exception) {
                         Log.e(TAG, "decrypt kDb failed: ${e.message}", e)
@@ -147,7 +155,7 @@ class VaultRepository @Inject constructor(
                 }
             )
         } catch (e: Exception) {
-            Log.e(TAG, "biometric setup failed: ${e.message}", e)
+            Log.e(TAG, "biometric setup failed: ${e.message}")
             _state.value = VaultState.Error("Biometric not available: ${e.message}")
         }
     }
@@ -200,15 +208,17 @@ class VaultRepository @Inject constructor(
 
     fun lock() {
         VaultSession.lock()
-        database?.close()
+        try { database?.close() } catch (_: Exception) {}
         database = null
+        _dbReady.value = null
         _state.value = VaultState.BiometricRequired
     }
 
     fun signOut() {
         VaultSession.lock()
-        database?.close()
+        try { database?.close() } catch (_: Exception) {}
         database = null
+        _dbReady.value = null
         biometricVaultManager.clearLocalKey()
         _state.value = VaultState.Idle
     }

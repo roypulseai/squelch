@@ -7,6 +7,8 @@ import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.Query
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -27,12 +29,19 @@ class FirestoreTransport(
     private val _incoming = MutableSharedFlow<Transport.TransportFrame>(extraBufferCapacity = 64)
     override val incoming: SharedFlow<Transport.TransportFrame> = _incoming.asSharedFlow()
 
-    private val db = FirebaseFirestore.getInstance()
+    private var db: FirebaseFirestore? = null
     private var listener: ListenerRegistration? = null
-    private val scope = CoroutineScope(Dispatchers.IO)
+    private var scope: CoroutineScope? = null
 
     override fun start() {
-        listener = db.collection(COLLECTION)
+        try {
+            db = FirebaseFirestore.getInstance()
+        } catch (e: Exception) {
+            Log.e(TAG, "FirebaseFirestore init failed: ${e.message}")
+            return
+        }
+        scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        listener = db!!.collection(COLLECTION)
             .whereEqualTo("recipient", edPubHex)
             .orderBy("timestamp", Query.Direction.DESCENDING)
             .limit(BATCH_SIZE.toLong())
@@ -50,7 +59,7 @@ class FirestoreTransport(
 
                     try {
                         val payload = Base64.decode(payloadB64, Base64.NO_WRAP)
-                        scope.launch {
+                        scope?.launch {
                             _incoming.emit(
                                 Transport.TransportFrame(
                                     senderEdPubHex = sender,
@@ -63,7 +72,11 @@ class FirestoreTransport(
                         Log.e(TAG, "Failed to decode message: ${e.message}")
                     }
 
-                    doc.reference.delete()
+                    try {
+                        doc.reference.delete()
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to delete message: ${e.message}")
+                    }
                 }
             }
         Log.d(TAG, "Firestore transport started, listening for messages to $edPubHex")
@@ -72,17 +85,20 @@ class FirestoreTransport(
     override fun stop() {
         listener?.remove()
         listener = null
+        scope?.cancel()
+        scope = null
         Log.d(TAG, "Firestore transport stopped")
     }
 
     override fun send(recipientEdPubHex: String, payload: ByteArray) {
+        val fireDb = db ?: return
         val data = mapOf(
             "sender" to edPubHex,
             "recipient" to recipientEdPubHex,
             "payload" to Base64.encodeToString(payload, Base64.NO_WRAP),
             "timestamp" to com.google.firebase.Timestamp.now()
         )
-        db.collection(COLLECTION)
+        fireDb.collection(COLLECTION)
             .add(data)
             .addOnSuccessListener { Log.d(TAG, "Message sent to $recipientEdPubHex") }
             .addOnFailureListener { e -> Log.e(TAG, "Send failed: ${e.message}") }

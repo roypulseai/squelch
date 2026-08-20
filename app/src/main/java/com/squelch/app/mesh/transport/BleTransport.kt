@@ -15,6 +15,8 @@ import android.os.ParcelUuid
 import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -39,8 +41,8 @@ class BleTransport(private val context: Context) : Transport {
     private var scanner: BluetoothLeScanner? = null
     private var advertiseCallback: AdvertiseCallback? = null
     private var scanCallback: ScanCallback? = null
-    private var running = false
-    private val scope = CoroutineScope(Dispatchers.IO)
+    @Volatile private var running = false
+    private var scope: CoroutineScope? = null
 
     override fun start() {
         val btManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
@@ -49,6 +51,7 @@ class BleTransport(private val context: Context) : Transport {
             Log.w(TAG, "Bluetooth not available or disabled")
             return
         }
+        scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         running = true
         startAdvertising()
         startScanning()
@@ -59,13 +62,13 @@ class BleTransport(private val context: Context) : Transport {
         running = false
         stopAdvertising()
         stopScanning()
+        scope?.cancel()
+        scope = null
         Log.d(TAG, "BLE transport stopped")
     }
 
     override fun send(recipientEdPubHex: String, payload: ByteArray) {
         if (!running) return
-        // BLE advertising is broadcast-only; payload embedded in advertise data
-        // For unicast, the recipient filter is in the payload itself
         Log.d(TAG, "BLE send: ${payload.size} bytes to $recipientEdPubHex (broadcast)")
     }
 
@@ -94,7 +97,11 @@ class BleTransport(private val context: Context) : Transport {
                 Log.e(TAG, "Advertising failed: $errorCode")
             }
         }
-        advertiser?.startAdvertising(settings, data, advertiseCallback)
+        try {
+            advertiser?.startAdvertising(settings, data, advertiseCallback)
+        } catch (e: Exception) {
+            Log.e(TAG, "startAdvertising crashed: ${e.message}")
+        }
     }
 
     @SuppressLint("MissingPermission")
@@ -115,9 +122,7 @@ class BleTransport(private val context: Context) : Transport {
                 result ?: return
                 val data = result.scanRecord?.serviceData?.get(ParcelUuid(SERVICE_UUID))
                 if (data != null && data.isNotEmpty()) {
-                    scope.launch {
-                        // Extract sender edPub from BLE advertisement data
-                        // Format: 2 bytes version + 32 bytes edPub
+                    scope?.launch {
                         if (data.size > 34) {
                             val edPubHex = com.squelch.app.util.Bytes.hex(data.copyOfRange(2, 34))
                             _incoming.emit(
@@ -147,8 +152,12 @@ class BleTransport(private val context: Context) : Transport {
             .setScanMode(android.bluetooth.le.ScanSettings.SCAN_MODE_LOW_LATENCY)
             .build()
 
-        scanner?.startScan(filters, settings, scanCallback)
-        Log.d(TAG, "Scanning started")
+        try {
+            scanner?.startScan(filters, settings, scanCallback)
+            Log.d(TAG, "Scanning started")
+        } catch (e: Exception) {
+            Log.e(TAG, "startScan crashed: ${e.message}")
+        }
     }
 
     @SuppressLint("MissingPermission")

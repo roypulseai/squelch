@@ -4,20 +4,25 @@ object VaultSession {
 
     @Volatile private var kDb: ByteArray? = null
     @Volatile private var googleUid: String? = null
+    private val lock = Any()
 
-    val isUnlocked: Boolean get() = kDb != null
+    val isUnlocked: Boolean get() = synchronized(lock) { kDb != null }
 
-    fun kDbOrEmpty(): ByteArray = kDb?.copyOf() ?: ByteArray(0)
-    fun googleUidOrNull(): String? = googleUid
+    fun kDbOrEmpty(): ByteArray = synchronized(lock) { kDb?.copyOf() ?: ByteArray(0) }
+    fun googleUidOrNull(): String? = synchronized(lock) { googleUid }
 
     fun unlock(kDb: ByteArray, googleUid: String) {
-        this.kDb = kDb.copyOf()
-        this.googleUid = googleUid
+        synchronized(lock) {
+            this.kDb = kDb.copyOf()
+            this.googleUid = googleUid
+        }
     }
 
     fun lock() {
-        kDb?.fill(0)
-        kDb = null
-        googleUid = null
+        synchronized(lock) {
+            kDb?.fill(0)
+            kDb = null
+            googleUid = null
+        }
     }
 }

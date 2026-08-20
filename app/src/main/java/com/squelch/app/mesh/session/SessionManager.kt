@@ -7,7 +7,8 @@ import com.squelch.app.data.local.entity.MessageEntity
 import com.squelch.app.mesh.engine.MeshEngine
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import java.util.UUID
 
@@ -20,14 +21,20 @@ class SessionManager(
         private const val TAG = "SessionManager"
     }
 
-    private val scope = CoroutineScope(Dispatchers.IO)
-    private var job: Job? = null
+    private var scope: CoroutineScope? = null
+    private var job: kotlinx.coroutines.Job? = null
 
     fun start() {
         engine.start()
-        job = scope.launch {
+        val s = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        scope = s
+        job = s.launch {
             engine.messages.collect { incoming ->
-                handleIncomingMessage(incoming)
+                try {
+                    handleIncomingMessage(incoming)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to handle message: ${e.message}")
+                }
             }
         }
         Log.d(TAG, "SessionManager started")
@@ -35,6 +42,9 @@ class SessionManager(
 
     fun stop() {
         job?.cancel()
+        job = null
+        scope?.cancel()
+        scope = null
         engine.stop()
         Log.d(TAG, "SessionManager stopped")
     }

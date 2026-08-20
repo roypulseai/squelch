@@ -10,6 +10,8 @@ import com.squelch.app.util.Bytes
 import com.squelch.app.util.toHex
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -19,6 +21,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.security.SecureRandom
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 
 class MeshEngine(
     private val identity: Identity,
@@ -28,8 +31,8 @@ class MeshEngine(
         private const val TAG = "MeshEngine"
     }
 
-    private val scope = CoroutineScope(Dispatchers.IO)
-    private val sessions = mutableMapOf<String, NoiseSession>()
+    private var scope: CoroutineScope? = null
+    private val sessions = ConcurrentHashMap<String, NoiseSession>()
     private val rng = SecureRandom()
 
     private val _peers = MutableStateFlow<Set<String>>(emptySet())
@@ -45,19 +48,34 @@ class MeshEngine(
     )
 
     fun start() {
+        val s = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        scope = s
         for (transport in transports) {
-            transport.start()
-            scope.launch {
-                transport.incoming.collect { frame ->
-                    handleFrame(frame)
+            try {
+                transport.start()
+            } catch (e: Exception) {
+                Log.e(TAG, "Transport ${transport.name} failed to start: ${e.message}")
+                continue
+            }
+            s.launch {
+                try {
+                    transport.incoming.collect { frame ->
+                        handleFrame(frame)
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Transport ${transport.name} collection failed: ${e.message}")
                 }
             }
         }
     }
 
     fun stop() {
-        for (transport in transports) transport.stop()
+        for (transport in transports) {
+            try { transport.stop() } catch (_: Exception) {}
+        }
         sessions.clear()
+        scope?.cancel()
+        scope = null
     }
 
     fun sendMessage(recipientEdPubHex: String, plaintext: ByteArray) {
@@ -80,7 +98,11 @@ class MeshEngine(
         )
         val encoded = MessageCodec.encode(msg)
         for (transport in transports) {
-            transport.send(recipientEdPubHex, encoded)
+            try {
+                transport.send(recipientEdPubHex, encoded)
+            } catch (e: Exception) {
+                Log.e(TAG, "Send via ${transport.name} failed: ${e.message}")
+            }
         }
     }
 
@@ -93,13 +115,19 @@ class MeshEngine(
         when (frame.kind) {
             Transport.TransportFrame.KIND_HELLO -> {
                 Log.d(TAG, "HELLO from $sender")
-                initiateHandshake(sender)
+                try { initiateHandshake(sender) } catch (e: Exception) {
+                    Log.e(TAG, "Handshake initiation failed: ${e.message}")
+                }
             }
             Transport.TransportFrame.KIND_HS -> {
-                handleHandshake(sender, frame.payload)
+                try { handleHandshake(sender, frame.payload) } catch (e: Exception) {
+                    Log.e(TAG, "Handshake handling failed: ${e.message}")
+                }
             }
             Transport.TransportFrame.KIND_DATA -> {
-                handleData(sender, frame.payload)
+                try { handleData(sender, frame.payload) } catch (e: Exception) {
+                    Log.e(TAG, "Data handling failed: ${e.message}")
+                }
             }
         }
     }
@@ -116,7 +144,7 @@ class MeshEngine(
         val hsMsg = session.writeHandshake()
         val wrapped = wrapHandshakeMessage(remotePubHex, hsMsg)
         for (transport in transports) {
-            transport.send(remotePubHex, wrapped)
+            try { transport.send(remotePubHex, wrapped) } catch (_: Exception) {}
         }
     }
 
@@ -138,7 +166,7 @@ class MeshEngine(
                 val response = session.writeHandshake()
                 val wrapped = wrapHandshakeMessage(sender, response)
                 for (transport in transports) {
-                    transport.send(sender, wrapped)
+                    try { transport.send(sender, wrapped) } catch (_: Exception) {}
                 }
             }
             Log.d(TAG, "Handshake complete with $sender")
@@ -159,7 +187,7 @@ class MeshEngine(
             val plaintext = session.decrypt(payload)
             val msg = MessageCodec.decode(plaintext) ?: return
             if (msg.recipient != identity.edPub.toHex()) return
-            scope.launch {
+            scope?.launch {
                 _messages.emit(
                     IncomingMessage(
                         senderEdPubHex = msg.sender,
