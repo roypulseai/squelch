@@ -9,6 +9,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.fragment.app.FragmentActivity
 import com.squelch.app.auth.AuthRepository
+import com.squelch.app.data.remote.DriveBackupManager
+import com.squelch.app.data.remote.FirestoreVaultManager
 import com.squelch.app.data.repository.VaultRepository
 import com.squelch.app.ui.navigation.AppEntry
 import com.squelch.app.ui.theme.SquelchTheme
@@ -24,6 +26,8 @@ class MainActivity : FragmentActivity() {
 
     @Inject lateinit var authRepository: AuthRepository
     @Inject lateinit var vaultRepository: VaultRepository
+    @Inject lateinit var driveBackupManager: DriveBackupManager
+    @Inject lateinit var firestoreVaultManager: FirestoreVaultManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -38,7 +42,9 @@ class MainActivity : FragmentActivity() {
                     ) {
                         AppEntry(
                             authRepository = authRepository,
-                            vaultRepository = vaultRepository
+                            vaultRepository = vaultRepository,
+                            driveBackupManager = driveBackupManager,
+                            firestoreVaultManager = firestoreVaultManager
                         )
                     }
                 }

@@ -5,9 +5,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
+import androidx.compose.material.icons.filled.Backup
+import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Logout
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -19,21 +22,24 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     lockEnabled: Boolean = false,
+    isBackingUp: Boolean = false,
     onSignOut: () -> Unit = {},
     onLock: () -> Unit = {},
     onEnableBiometric: () -> Unit = {},
-    onDisableBiometric: () -> Unit = {}
+    onDisableBiometric: () -> Unit = {},
+    onBackupNow: () -> Unit = {},
+    onRestore: () -> Unit = {}
 ) {
     var checked by remember { mutableStateOf(lockEnabled) }
 
@@ -79,9 +85,32 @@ fun SettingsScreen(
             )
             HorizontalDivider()
             ListItem(
+                headlineContent = { Text("Backup to Google Drive") },
+                supportingContent = { Text("Save vault & messages to your Drive") },
+                leadingContent = {
+                    Icon(Icons.Default.Backup, contentDescription = null)
+                },
+                trailingContent = {
+                    if (isBackingUp) {
+                        CircularProgressIndicator(modifier = Modifier.padding(end = 8.dp))
+                    }
+                },
+                modifier = Modifier.clickable(enabled = !isBackingUp) { onBackupNow() }
+            )
+            HorizontalDivider()
+            ListItem(
+                headlineContent = { Text("Restore from Google Drive") },
+                supportingContent = { Text("Restore contacts & messages from backup") },
+                leadingContent = {
+                    Icon(Icons.Default.CloudDownload, contentDescription = null)
+                },
+                modifier = Modifier.clickable { onRestore() }
+            )
+            HorizontalDivider()
+            ListItem(
                 headlineContent = { Text("Sign Out") },
                 leadingContent = {
-                    Icon(Icons.Default.Logout, contentDescription = null)
+                    Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = null)
                 },
                 modifier = Modifier.clickable { onSignOut() }
             )
