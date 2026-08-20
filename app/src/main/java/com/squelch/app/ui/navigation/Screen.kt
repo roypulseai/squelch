@@ -22,6 +22,7 @@ sealed class Screen(val route: String) {
     data object NewChat : Screen("new_chat")
     data object Radar : Screen("radar")
     data object Settings : Screen("settings")
+    data object Profile : Screen("profile")
     data object Restore : Screen("restore")
 }
 

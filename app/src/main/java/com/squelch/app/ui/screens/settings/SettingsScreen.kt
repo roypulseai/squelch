@@ -10,6 +10,7 @@ import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -34,6 +35,9 @@ import androidx.compose.ui.unit.dp
 fun SettingsScreen(
     lockEnabled: Boolean = false,
     isBackingUp: Boolean = false,
+    displayName: String = "",
+    email: String = "",
+    onNavigateToProfile: () -> Unit = {},
     onSignOut: () -> Unit = {},
     onLock: () -> Unit = {},
     onEnableBiometric: () -> Unit = {},
@@ -59,6 +63,15 @@ fun SettingsScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
+            ListItem(
+                headlineContent = { Text(displayName.ifEmpty { "Profile" }) },
+                supportingContent = { Text(email) },
+                leadingContent = {
+                    Icon(Icons.Default.Person, contentDescription = null)
+                },
+                modifier = Modifier.clickable { onNavigateToProfile() }
+            )
+            HorizontalDivider()
             ListItem(
                 headlineContent = { Text("Vault Lock") },
                 supportingContent = { Text("Require biometric/PIN to unlock vault") },

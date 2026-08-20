@@ -54,6 +54,7 @@ import com.squelch.app.ui.screens.onboarding.BiometricGateScreen
 import com.squelch.app.ui.screens.onboarding.RestoreScreen
 import com.squelch.app.ui.screens.onboarding.SignInScreen
 import com.squelch.app.ui.screens.settings.SettingsScreen
+import com.squelch.app.ui.screens.settings.ProfileScreen
 import com.squelch.app.util.toHex
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.MainScope
@@ -159,6 +160,13 @@ fun AppEntry(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
     val showBottomBar = currentRoute in bottomNavRoutes
+
+    val contactsFlow = remember(vaultState) {
+        vaultRepository.db?.contacts()?.observeAll()
+    }
+    val contacts by contactsFlow
+        ?.collectAsState(initial = emptyList())
+        ?: remember { mutableStateOf(emptyList()) }
 
     Surface(modifier = Modifier.fillMaxSize()) {
         Scaffold(
@@ -302,6 +310,7 @@ fun AppEntry(
 
                 composable(Screen.Contacts.route) {
                     ContactsScreen(
+                        contacts = contacts,
                         onNavigateToAddContact = { navController.navigate(Screen.AddContact.route) },
                         onNavigateToMyQr = { navController.navigate(Screen.MyQr.route) },
                         onNavigateToUserSearch = { navController.navigate(Screen.UserSearch.route) }
@@ -374,9 +383,13 @@ fun AppEntry(
                 }
 
                 composable(Screen.Settings.route) {
+                    val signed = authRepository.signedIn()
                     SettingsScreen(
                         lockEnabled = vaultRepository.isLockEnabled,
                         isBackingUp = isBackingUp,
+                        displayName = signed?.displayName ?: "",
+                        email = signed?.email ?: "",
+                        onNavigateToProfile = { navController.navigate(Screen.Profile.route) },
                         onSignOut = {
                             vaultRepository.signOut()
                             authRepository.signOut()
@@ -412,6 +425,23 @@ fun AppEntry(
                         },
                         onRestore = {
                             navController.navigate(Screen.Restore.route)
+                        }
+                    )
+                }
+
+                composable(Screen.Profile.route) {
+                    val signed = authRepository.signedIn()
+                    ProfileScreen(
+                        displayName = signed?.displayName ?: "",
+                        email = signed?.email ?: "",
+                        googleUid = signed?.googleUid ?: "",
+                        onBack = { navController.popBackStack() },
+                        onDeleteAccount = {
+                            vaultRepository.signOut()
+                            authRepository.deleteAccount()
+                            navController.navigate(Screen.SignIn.route) {
+                                popUpTo(0) { inclusive = true }
+                            }
                         }
                     )
                 }

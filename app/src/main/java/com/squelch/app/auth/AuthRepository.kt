@@ -46,5 +46,10 @@ class AuthRepository @Inject constructor(
         _state.value = AuthState.Idle
     }
 
+    fun deleteAccount() {
+        firebaseAuthManager.revokeAccess()
+        _state.value = AuthState.Idle
+    }
+
     fun signedIn(): AuthState.SignedIn? = _state.value as? AuthState.SignedIn
 }

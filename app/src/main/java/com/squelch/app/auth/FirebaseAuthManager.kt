@@ -84,11 +84,23 @@ class FirebaseAuthManager @Inject constructor(
         }
     }
 
+    private fun getGoogleSignInClient(): com.google.android.gms.auth.api.signin.GoogleSignInClient {
+        val webClientId = context.getString(R.string.default_web_client_id)
+        val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+            .requestIdToken(webClientId)
+            .requestEmail()
+            .requestProfile()
+            .build()
+        return GoogleSignIn.getClient(context, gso)
+    }
+
     fun signOut() {
         auth.signOut()
-        GoogleSignIn.getClient(
-            context,
-            GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN).build()
-        ).signOut()
+        getGoogleSignInClient().signOut()
+    }
+
+    fun revokeAccess() {
+        auth.signOut()
+        getGoogleSignInClient().revokeAccess()
     }
 }
