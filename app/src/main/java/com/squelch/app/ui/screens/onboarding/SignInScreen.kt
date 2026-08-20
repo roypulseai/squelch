@@ -67,7 +67,7 @@ fun SignInScreen(
         verticalArrangement = Arrangement.Center
     ) {
         Image(
-            painter = painterResource(id = R.mipmap.ic_launcher),
+            painter = painterResource(id = R.drawable.ic_launcher_foreground),
             contentDescription = "Squelch",
             modifier = Modifier.size(96.dp)
         )
