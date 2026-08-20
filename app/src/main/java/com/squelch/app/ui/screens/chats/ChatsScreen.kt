@@ -35,7 +35,6 @@ import java.util.Locale
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatsScreen(
-    onNavigateToSettings: () -> Unit = {},
     onNavigateToConversation: (id: String, name: String) -> Unit = { _, _ -> },
     onNavigateToNewChat: () -> Unit = {},
     viewModel: ChatViewModel = androidx.hilt.navigation.compose.hiltViewModel()
