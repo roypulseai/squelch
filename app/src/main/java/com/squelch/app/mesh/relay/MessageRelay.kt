@@ -2,6 +2,7 @@ package com.squelch.app.mesh.relay
 
 import android.content.Context
 import android.util.Log
+import com.squelch.app.crypto.E2ECrypto
 import com.squelch.app.crypto.Identity
 import com.squelch.app.data.local.SquelchDatabase
 import com.squelch.app.data.local.entity.ConversationEntity
@@ -11,6 +12,8 @@ import com.squelch.app.mesh.transport.FirestoreTransport
 import com.squelch.app.mesh.transport.Transport
 import com.squelch.app.util.Notifications
 import com.squelch.app.util.toHex
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.Query
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -18,6 +21,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import org.json.JSONObject
 import java.util.UUID
 import javax.inject.Inject
@@ -30,6 +34,7 @@ class MessageRelay @Inject constructor(
 
     companion object {
         private const val TAG = "MessageRelay"
+        private const val MSG_TTL_HOURS = 24L
     }
 
     data class BlockEvent(val peerEdPubHex: String, val blocked: Boolean)
@@ -39,6 +44,7 @@ class MessageRelay @Inject constructor(
     private var transport: FirestoreTransport? = null
     private var scope: CoroutineScope? = null
     private var incomingJob: kotlinx.coroutines.Job? = null
+    private var database: SquelchDatabase? = null
 
     var selfEdPubHex: String = ""
         private set
@@ -59,7 +65,7 @@ class MessageRelay @Inject constructor(
         }
     }
 
-    fun start(edPubHex: String, database: SquelchDatabase, identity: Identity, email: String = "") {
+    fun start(edPubHex: String, db: SquelchDatabase, identity: Identity, email: String = "") {
         if (transport != null) {
             Log.d(TAG, "Already running for $edPubHex")
             return
@@ -67,7 +73,8 @@ class MessageRelay @Inject constructor(
         selfEdPubHex = edPubHex
         selfIdentity = identity
         selfEmail = email
-        MessageRelayHolder.database = database
+        database = db
+        MessageRelayHolder.database = db
         Log.d(TAG, "Starting relay for self=$edPubHex")
 
         try {
@@ -82,12 +89,13 @@ class MessageRelay @Inject constructor(
                 t.incoming.collect { frame ->
                     Log.d(TAG, "Frame from ${frame.senderEdPubHex}, kind=${frame.kind}, size=${frame.payload.size}")
                     try {
-                        handleIncoming(frame.senderEdPubHex, frame.payload, frame.senderName, frame.senderEmail, database, frame.msgId)
+                        handleIncoming(frame.senderEdPubHex, frame.payload, frame.senderName, frame.senderEmail, db, frame.msgId)
                     } catch (e: Exception) {
                         Log.e(TAG, "Handle incoming failed: ${e.message}", e)
                     }
                 }
             }
+            s.launch { cleanupOldMessages() }
             Log.d(TAG, "MessageRelay started for $edPubHex")
         } catch (e: Exception) {
             Log.e(TAG, "Start failed: ${e.message}", e)
@@ -101,6 +109,7 @@ class MessageRelay @Inject constructor(
         transport = null
         scope?.cancel()
         scope = null
+        database = null
         MessageRelayHolder.database = null
         Log.d(TAG, "MessageRelay stopped")
     }
@@ -118,12 +127,18 @@ class MessageRelay @Inject constructor(
         }
 
         scope?.launch {
+            val identity = selfIdentity ?: run {
+                Log.e(TAG, "No identity, cannot send")
+                return@launch
+            }
+            val payload = encryptPayload(identity, recipientEdPubHex, recipientUid, plaintext.toByteArray(Charsets.UTF_8))
+
             t.sendWithMeta(
                 recipientEdPubHex = recipientEdPubHex,
                 recipientUid = recipientUid,
                 senderName = senderName,
                 senderEmail = selfEmail,
-                payload = plaintext.toByteArray(Charsets.UTF_8),
+                payload = payload,
                 msgId = msgId
             )
             Log.d(TAG, "Message sent to $recipientEdPubHex")
@@ -142,16 +157,56 @@ class MessageRelay @Inject constructor(
             return
         }
         scope?.launch {
+            val identity = selfIdentity ?: return@launch
+            val payload = encryptPayload(identity, recipientEdPubHex, recipientUid, payloadBytes)
+
             t.sendWithMeta(
                 recipientEdPubHex = recipientEdPubHex,
                 recipientUid = recipientUid,
                 senderName = senderName,
                 senderEmail = selfEmail,
-                payload = payloadBytes,
+                payload = payload,
                 kind = kind
             )
             Log.d(TAG, "Command sent (kind=$kind) to $recipientEdPubHex")
         }
+    }
+
+    private suspend fun encryptPayload(
+        identity: Identity,
+        recipientEdPubHex: String,
+        recipientUid: String,
+        plaintext: ByteArray
+    ): ByteArray {
+        var recipientXPub: String? = null
+        val db = database
+        if (db != null) {
+            try {
+                val contact = db.contacts().get(recipientEdPubHex)
+                recipientXPub = contact?.xPub?.ifEmpty { null }
+            } catch (_: Exception) {}
+        }
+        if (recipientXPub == null && recipientUid.isNotEmpty()) {
+            try {
+                val doc = FirebaseFirestore.getInstance()
+                    .collection("users")
+                    .document(recipientUid)
+                    .get()
+                    .await()
+                recipientXPub = doc.getString("xPub")
+            } catch (_: Exception) {}
+        }
+        if (recipientXPub != null && recipientXPub!!.isNotEmpty()) {
+            return try {
+                val envelope = E2ECrypto.encryptFor(identity, recipientXPub, plaintext)
+                envelope.toByteArray(Charsets.UTF_8)
+            } catch (e: Exception) {
+                Log.e(TAG, "Encryption failed, sending plaintext: ${e.message}")
+                plaintext
+            }
+        }
+        Log.w(TAG, "No recipient xPub available, sending plaintext")
+        return plaintext
     }
 
     private suspend fun handleIncoming(
@@ -183,15 +238,29 @@ class MessageRelay @Inject constructor(
             return
         }
 
-        val plaintext = String(payload, Charsets.UTF_8)
+        val rawPayload = String(payload, Charsets.UTF_8)
 
-        if (plaintext.contains("\"hs\":") && plaintext.contains("\"s\":") && plaintext.contains("\"r\":")) {
+        if (rawPayload.contains("\"hs\":") && rawPayload.contains("\"s\":") && rawPayload.contains("\"r\":")) {
             Log.d(TAG, "Dropping Noise handshake message from $senderEdPubHex")
             return
         }
-        if (plaintext.contains("\"ct\":") && plaintext.contains("\"s\":") && plaintext.contains("\"r\":")) {
-            Log.d(TAG, "Dropping Noise mesh message from $senderEdPubHex")
-            return
+
+        val plaintext: String
+        if (rawPayload.contains("\"ct\":") && rawPayload.contains("\"sp\":")) {
+            val identity = selfIdentity
+            if (identity == null) {
+                Log.w(TAG, "No identity, dropping encrypted message from $senderEdPubHex")
+                return
+            }
+            val result = E2ECrypto.decryptWithMyKey(identity.xSecret, rawPayload)
+            if (result == null) {
+                Log.w(TAG, "Decryption failed, dropping encrypted message from $senderEdPubHex")
+                return
+            }
+            plaintext = String(result.second, Charsets.UTF_8)
+            Log.d(TAG, "Decrypted message from $senderEdPubHex")
+        } else {
+            plaintext = rawPayload
         }
 
         try {
@@ -285,6 +354,37 @@ class MessageRelay @Inject constructor(
             Log.d(TAG, "Notification shown for message from $resolvedName")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to show notification: ${e.message}")
+        }
+    }
+
+    private suspend fun cleanupOldMessages() {
+        try {
+            val fireDb = FirebaseFirestore.getInstance()
+            val cutoffMs = System.currentTimeMillis() - MSG_TTL_HOURS * 60 * 60 * 1000L
+            val cutoffDate = java.util.Date(cutoffMs)
+            val cutoffTimestamp = com.google.firebase.Timestamp(cutoffDate)
+
+            val oldMsgs = fireDb.collection("messages")
+                .whereLessThan("timestamp", cutoffTimestamp)
+                .get()
+                .await()
+            var deletedCount = 0
+            for (doc in oldMsgs.documents) {
+                try { doc.reference.delete().await() ; deletedCount++ } catch (_: Exception) {}
+            }
+            Log.d(TAG, "TTL cleanup: deleted $deletedCount old messages")
+
+            val oldAcks = fireDb.collection("delivery_acks")
+                .whereLessThan("timestamp", cutoffTimestamp)
+                .get()
+                .await()
+            var ackDeleted = 0
+            for (doc in oldAcks.documents) {
+                try { doc.reference.delete().await() ; ackDeleted++ } catch (_: Exception) {}
+            }
+            Log.d(TAG, "TTL cleanup: deleted $ackDeleted old delivery acks")
+        } catch (e: Exception) {
+            Log.e(TAG, "TTL cleanup failed: ${e.message}")
         }
     }
 }

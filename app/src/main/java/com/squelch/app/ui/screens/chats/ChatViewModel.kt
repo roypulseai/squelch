@@ -300,12 +300,13 @@ class ChatViewModel @Inject constructor(
             )
             val recipientUid = contact?.firebaseUid ?: ""
             if (messageRelay.isRunning && recipientUid.isNotEmpty()) {
+                val cmd = JSONObject().apply { put("cmd", "blocked") }
                 messageRelay.sendCommand(
                     recipientEdPubHex = edPubHex,
                     recipientUid = recipientUid,
                     senderName = "",
                     kind = Transport.TransportFrame.KIND_BLOCKED,
-                    payloadBytes = "blocked".toByteArray(Charsets.UTF_8)
+                    payloadBytes = cmd.toString().toByteArray(Charsets.UTF_8)
                 )
             }
         }
@@ -318,12 +319,13 @@ class ChatViewModel @Inject constructor(
             val contact = database.contacts().get(edPubHex)
             val recipientUid = contact?.firebaseUid ?: ""
             if (messageRelay.isRunning && recipientUid.isNotEmpty()) {
+                val cmd = JSONObject().apply { put("cmd", "unblocked") }
                 messageRelay.sendCommand(
                     recipientEdPubHex = edPubHex,
                     recipientUid = recipientUid,
                     senderName = "",
                     kind = Transport.TransportFrame.KIND_UNBLOCKED,
-                    payloadBytes = "unblocked".toByteArray(Charsets.UTF_8)
+                    payloadBytes = cmd.toString().toByteArray(Charsets.UTF_8)
                 )
             }
         }

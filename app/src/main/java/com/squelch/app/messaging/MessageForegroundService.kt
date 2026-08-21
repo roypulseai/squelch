@@ -92,9 +92,14 @@ class MessageForegroundService : Service() {
 
         pollJob?.cancel()
         pollJob = scope.launch {
+            var pollCount = 0
             while (isActive) {
                 delay(POLL_INTERVAL_MS)
+                pollCount++
                 try {
+                    if (pollCount % 20 == 0) {
+                        cleanupOldDocuments(firestore)
+                    }
                     val snapshot = firestore.collection("messages")
                         .whereEqualTo("recipient", selfEdPubHex)
                         .get()
@@ -236,5 +241,32 @@ class MessageForegroundService : Service() {
             .setContentIntent(pending)
             .setOngoing(true)
             .build()
+    }
+
+    private suspend fun cleanupOldDocuments(firestore: FirebaseFirestore) {
+        try {
+            val cutoffMs = System.currentTimeMillis() - 24 * 60 * 60 * 1000L
+            val cutoffTs = com.google.firebase.Timestamp(java.util.Date(cutoffMs))
+
+            val oldMsgs = firestore.collection("messages")
+                .whereLessThan("timestamp", cutoffTs)
+                .get()
+                .await()
+            for (doc in oldMsgs.documents) {
+                try { doc.reference.delete().await() } catch (_: Exception) {}
+            }
+            Log.d(TAG, "Cleanup: deleted ${oldMsgs.documents.size} old messages")
+
+            val oldAcks = firestore.collection("delivery_acks")
+                .whereLessThan("timestamp", cutoffTs)
+                .get()
+                .await()
+            for (doc in oldAcks.documents) {
+                try { doc.reference.delete().await() } catch (_: Exception) {}
+            }
+            Log.d(TAG, "Cleanup: deleted ${oldAcks.documents.size} old acks")
+        } catch (e: Exception) {
+            Log.e(TAG, "Cleanup failed: ${e.message}")
+        }
     }
 }
