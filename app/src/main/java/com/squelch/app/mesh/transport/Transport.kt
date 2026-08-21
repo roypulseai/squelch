@@ -23,6 +23,8 @@ interface Transport {
             const val KIND_HS = 3
             const val KIND_RECALL = 4
             const val KIND_EDIT = 5
+            const val KIND_BLOCKED = 6
+            const val KIND_UNBLOCKED = 7
         }
     }
 }

@@ -4,6 +4,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -33,17 +34,20 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.automirrored.filled.Forward
 import androidx.compose.material.icons.filled.SignalWifi4Bar
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -110,6 +114,11 @@ fun ConversationScreen(
 
     var showUserInfo by remember { mutableStateOf(false) }
     val userInfoSheetState = rememberModalBottomSheetState()
+    var isRecipientBlocked by remember { mutableStateOf(false) }
+
+    LaunchedEffect(conversationId) {
+        isRecipientBlocked = viewModel.isBlocked(conversationId)
+    }
 
     var showActionsFor by remember { mutableStateOf<MessageEntity?>(null) }
 
@@ -479,6 +488,39 @@ fun ConversationScreen(
                     }
                 }
                 Spacer(modifier = Modifier.height(24.dp))
+                if (isRecipientBlocked) {
+                    OutlinedButton(
+                        onClick = {
+                            viewModel.unblockSender(conversationId)
+                            isRecipientBlocked = false
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error
+                        ),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error)
+                    ) {
+                        Icon(Icons.Default.Block, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Unblock User")
+                    }
+                } else {
+                    OutlinedButton(
+                        onClick = {
+                            viewModel.blockSender(conversationId)
+                            isRecipientBlocked = true
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error
+                        ),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error)
+                    ) {
+                        Icon(Icons.Default.Block, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Block User")
+                    }
+                }
             }
         }
     }

@@ -32,7 +32,62 @@ class ChatViewModel @Inject constructor(
     private val messageRelay: MessageRelay
 ) : ViewModel() {
 
+    companion object {
+        private const val TAG = "ChatViewModel"
+    }
+
     private val db: SquelchDatabase? get() = vaultRepository.db
+
+    init {
+        viewModelScope.launch {
+            for (event in messageRelay.blockEvents) {
+                val database = db ?: continue
+                val contact = try {
+                    database.contacts().get(event.peerEdPubHex)
+                } catch (_: Exception) { null }
+                val resolvedName = contact?.displayName?.ifEmpty { event.peerEdPubHex.take(8) }
+                    ?: event.peerEdPubHex.take(8)
+
+                val body = if (event.blocked) {
+                    "You've been blocked by $resolvedName"
+                } else {
+                    "You've been unblocked by $resolvedName"
+                }
+
+                val message = MessageEntity(
+                    conversationId = event.peerEdPubHex,
+                    msgId = UUID.randomUUID().toString(),
+                    sender = "",
+                    body = body,
+                    timestamp = System.currentTimeMillis(),
+                    direction = 2,
+                    delivery = 1,
+                    kind = 2
+                )
+                database.messages().insert(message)
+
+                val existingConv = database.conversations().get(event.peerEdPubHex)
+                if (existingConv == null) {
+                    database.conversations().upsert(
+                        ConversationEntity(
+                            id = event.peerEdPubHex,
+                            name = resolvedName,
+                            lastMessagePreview = body,
+                            lastMessageTimestamp = message.timestamp,
+                            unreadCount = 1
+                        )
+                    )
+                } else {
+                    database.conversations().updateLastMessage(
+                        id = event.peerEdPubHex,
+                        preview = body,
+                        timestamp = message.timestamp
+                    )
+                }
+                Log.d(TAG, "Stored block event for $resolvedName")
+            }
+        }
+    }
 
     val conversations: StateFlow<List<ConversationEntity>> =
         vaultRepository.dbReady.flatMapLatest { db ->
@@ -243,7 +298,48 @@ class ChatViewModel @Inject constructor(
                     displayName = contact?.displayName ?: edPubHex.take(8)
                 )
             )
+            val recipientUid = contact?.firebaseUid ?: ""
+            if (messageRelay.isRunning && recipientUid.isNotEmpty()) {
+                messageRelay.sendCommand(
+                    recipientEdPubHex = edPubHex,
+                    recipientUid = recipientUid,
+                    senderName = "",
+                    kind = Transport.TransportFrame.KIND_BLOCKED,
+                    payloadBytes = "blocked".toByteArray(Charsets.UTF_8)
+                )
+            }
         }
+    }
+
+    fun unblockSender(edPubHex: String) {
+        viewModelScope.launch {
+            val database = vaultRepository.db ?: return@launch
+            database.blocked().unblock(edPubHex)
+            val contact = database.contacts().get(edPubHex)
+            val recipientUid = contact?.firebaseUid ?: ""
+            if (messageRelay.isRunning && recipientUid.isNotEmpty()) {
+                messageRelay.sendCommand(
+                    recipientEdPubHex = edPubHex,
+                    recipientUid = recipientUid,
+                    senderName = "",
+                    kind = Transport.TransportFrame.KIND_UNBLOCKED,
+                    payloadBytes = "unblocked".toByteArray(Charsets.UTF_8)
+                )
+            }
+        }
+    }
+
+    val blockedUsers: StateFlow<List<BlockedEntity>> =
+        vaultRepository.dbReady.flatMapLatest { db ->
+            if (db == null) return@flatMapLatest flowOf(emptyList())
+            db.blocked().observeAll()
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    suspend fun isBlocked(edPubHex: String): Boolean {
+        val database = vaultRepository.db ?: return false
+        return try {
+            database.blocked().get(edPubHex) != null
+        } catch (_: Exception) { false }
     }
 
     fun createConversation(id: String, name: String) {

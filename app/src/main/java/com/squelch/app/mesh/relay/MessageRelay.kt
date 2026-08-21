@@ -13,6 +13,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.util.UUID
@@ -25,6 +26,10 @@ class MessageRelay @Inject constructor() {
     companion object {
         private const val TAG = "MessageRelay"
     }
+
+    data class BlockEvent(val peerEdPubHex: String, val blocked: Boolean)
+
+    val blockEvents = Channel<BlockEvent>(Channel.BUFFERED)
 
     private var transport: FirestoreTransport? = null
     private var scope: CoroutineScope? = null
@@ -157,6 +162,19 @@ class MessageRelay @Inject constructor() {
         val blockedPubkeys = try { db.blocked().allPubkeys() } catch (_: Exception) { emptyList() }
         if (senderEdPubHex in blockedPubkeys) {
             Log.d(TAG, "Ignoring blocked sender $senderEdPubHex")
+            try {
+                val contact = db.contacts().get(senderEdPubHex)
+                val recipientUid = contact?.firebaseUid ?: ""
+                if (recipientUid.isNotEmpty()) {
+                    sendCommand(
+                        recipientEdPubHex = senderEdPubHex,
+                        recipientUid = recipientUid,
+                        senderName = "",
+                        kind = Transport.TransportFrame.KIND_BLOCKED,
+                        payloadBytes = "blocked".toByteArray(Charsets.UTF_8)
+                    )
+                }
+            } catch (_: Exception) {}
             return
         }
 
@@ -182,6 +200,18 @@ class MessageRelay @Inject constructor() {
                     db.messages().updateBody(targetMsgId, newText)
                     Log.d(TAG, "Edited message $targetMsgId from $senderEdPubHex")
                 }
+                return
+            }
+
+            if (command == "blocked") {
+                Log.d(TAG, "Received block notification from $senderEdPubHex")
+                blockEvents.trySend(BlockEvent(senderEdPubHex, blocked = true))
+                return
+            }
+
+            if (command == "unblocked") {
+                Log.d(TAG, "Received unblock notification from $senderEdPubHex")
+                blockEvents.trySend(BlockEvent(senderEdPubHex, blocked = false))
                 return
             }
         } catch (_: Exception) {

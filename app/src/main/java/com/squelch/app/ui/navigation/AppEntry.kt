@@ -51,6 +51,7 @@ import com.squelch.app.ui.screens.chats.CreateGroupScreen
 import com.squelch.app.ui.screens.chats.GroupInfoScreen
 import com.squelch.app.ui.screens.chats.NewChatScreen
 import com.squelch.app.ui.screens.chats.StrangerMessagesScreen
+import com.squelch.app.ui.screens.chats.BlockedUsersScreen
 import com.squelch.app.ui.screens.chats.ChatViewModel
 import com.squelch.app.ui.screens.contacts.AddContactScreen
 import com.squelch.app.ui.screens.contacts.ContactsScreen
@@ -402,6 +403,14 @@ fun AppEntry(
                     )
                 }
 
+                composable(Screen.BlockedUsers.route) {
+                    val chatViewModel: ChatViewModel = hiltViewModel()
+                    BlockedUsersScreen(
+                        viewModel = chatViewModel,
+                        onBack = { navController.popBackStack() }
+                    )
+                }
+
                 composable(
                     route = Screen.Conversation.route,
                     arguments = listOf(
@@ -608,6 +617,7 @@ fun AppEntry(
                         displayName = signed?.displayName ?: "",
                         email = signed?.email ?: "",
                         onNavigateToProfile = { navController.navigate(Screen.Profile.route) },
+                        onNavigateToBlockedUsers = { navController.navigate(Screen.BlockedUsers.route) },
                         onSignOut = {
                             vaultRepository.signOut()
                             authRepository.signOut()
