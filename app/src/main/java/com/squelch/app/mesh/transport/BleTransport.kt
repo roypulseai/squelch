@@ -20,6 +20,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
 import java.security.MessageDigest
@@ -294,7 +295,7 @@ class BleTransport(
                         try { g.disconnect() } catch (_: Exception) {}
                         return
                     }
-                    writeChunked(g, msgChar, payload)
+                    scope?.launch { writeChunked(g, msgChar, payload) }
                 }
             })
         } catch (e: Exception) {
@@ -306,7 +307,7 @@ class BleTransport(
     }
 
     @SuppressLint("MissingPermission")
-    private fun writeChunked(gatt: BluetoothGatt, char: BluetoothGattCharacteristic, payload: ByteArray) {
+    private suspend fun writeChunked(gatt: BluetoothGatt, char: BluetoothGattCharacteristic, payload: ByteArray) {
         val senderPub = selfEdPub
         if (payload.size <= MAX_CHUNK - 4) {
             val frame = ByteArray(32 + 1 + 2 + 2 + payload.size)
@@ -344,7 +345,7 @@ class BleTransport(
                 char.value = frame
                 char.writeType = BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
                 gatt.writeCharacteristic(char)
-                Thread.sleep(20)
+                delay(20)
             } catch (e: Exception) {
                 Log.e(TAG, "Chunk write failed: ${e.message}")
                 break

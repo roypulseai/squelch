@@ -18,6 +18,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -446,26 +447,20 @@ fun AppEntry(
                         Identity.fromGoogleUid(it.googleUid).edPub.toHex()
                     } ?: ""
 
-                    val recipientUid = remember(conversationId) {
-                        var uid = ""
-                        kotlinx.coroutines.runBlocking {
-                            try {
-                                val contact = vaultRepository.db?.contacts()?.get(conversationId)
-                                uid = contact?.firebaseUid ?: ""
-                            } catch (_: Exception) {}
-                        }
-                        uid
+                    val recipientUid by produceState("", conversationId) {
+                        val db = vaultRepository.db ?: return@produceState
+                        try {
+                            val contact = withContext(Dispatchers.IO) { db.contacts().get(conversationId) }
+                            value = contact?.firebaseUid ?: ""
+                        } catch (_: Exception) {}
                     }
 
-                    val recipientEmail = remember(conversationId) {
-                        var email = ""
-                        kotlinx.coroutines.runBlocking {
-                            try {
-                                val contact = vaultRepository.db?.contacts()?.get(conversationId)
-                                email = contact?.email ?: ""
-                            } catch (_: Exception) {}
-                        }
-                        email
+                    val recipientEmail by produceState("", conversationId) {
+                        val db = vaultRepository.db ?: return@produceState
+                        try {
+                            val contact = withContext(Dispatchers.IO) { db.contacts().get(conversationId) }
+                            value = contact?.email ?: ""
+                        } catch (_: Exception) {}
                     }
 
                     ConversationScreen(

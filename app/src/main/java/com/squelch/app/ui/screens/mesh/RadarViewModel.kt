@@ -180,22 +180,12 @@ class RadarViewModel @Inject constructor(
 
     private fun observePeerChanges() {
         viewModelScope.launch {
-            val wifiFlow = wifiDirectManager.peers
-
             while (isActive) {
                 val engine = meshEngine
-                val bleFlow = engine?.peers
-                if (bleFlow != null) {
-                    bleFlow.combine(wifiFlow) { blePeers, wifiPeers ->
-                        Pair(blePeers, wifiPeers)
-                    }.collect { (blePeers, wifiPeers) ->
-                        rebuildPeerList(blePeers, wifiPeers)
-                    }
-                } else {
-                    wifiFlow.collect { wifiPeers ->
-                        rebuildPeerList(emptySet(), wifiPeers)
-                    }
-                }
+                val blePeers = engine?.peers?.value ?: emptySet()
+                val wifiPeers = wifiDirectManager.peers.value
+                rebuildPeerList(blePeers, wifiPeers)
+                delay(2000)
             }
         }
     }

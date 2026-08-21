@@ -379,17 +379,25 @@ class ChatViewModel @Inject constructor(
 
     fun getSelfPubkey(): String = messageRelay.selfEdPubHex
 
+    private val groupMemberFlows = mutableMapOf<String, StateFlow<List<GroupMemberEntity>>>()
+
     fun getGroupMembers(groupId: String): StateFlow<List<GroupMemberEntity>> =
-        vaultRepository.dbReady.flatMapLatest { db ->
-            if (db == null) return@flatMapLatest flowOf(emptyList())
-            db.groups().observeMembers(groupId)
-        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        groupMemberFlows.getOrPut(groupId) {
+            vaultRepository.dbReady.flatMapLatest { db ->
+                if (db == null) return@flatMapLatest flowOf(emptyList())
+                db.groups().observeMembers(groupId)
+            }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        }
+
+    private val groupFlows = mutableMapOf<String, StateFlow<GroupEntity?>>()
 
     fun observeGroup(groupId: String): StateFlow<GroupEntity?> =
-        vaultRepository.dbReady.flatMapLatest { db ->
-            if (db == null) return@flatMapLatest flowOf(null)
-            db.groups().observeGroup(groupId)
-        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+        groupFlows.getOrPut(groupId) {
+            vaultRepository.dbReady.flatMapLatest { db ->
+                if (db == null) return@flatMapLatest flowOf(null)
+                db.groups().observeGroup(groupId)
+            }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+        }
 
     fun renameGroup(groupId: String, newName: String) {
         viewModelScope.launch {
