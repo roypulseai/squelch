@@ -163,11 +163,20 @@ fun ChatsScreen(
             } else {
                 TopAppBar(
                     title = {
-                        Text(
-                            "Chats",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 22.sp
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                "Chats",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 22.sp,
+                                modifier = Modifier.padding(end = 4.dp)
+                            )
+                            Text(
+                                "· v1.1",
+                                fontWeight = FontWeight.Normal,
+                                fontSize = 14.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     },
                     actions = {
                         if (strangerCount > 0) {

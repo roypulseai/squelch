@@ -452,7 +452,29 @@ fun AppEntry(
                         val db = vaultRepository.db ?: return@produceState
                         try {
                             val contact = withContext(Dispatchers.IO) { db.contacts().get(conversationId) }
-                            value = contact?.firebaseUid ?: ""
+                            val uid = contact?.firebaseUid ?: ""
+                            if (uid.isNotEmpty()) {
+                                value = uid
+                            } else {
+                                val doc = withContext(Dispatchers.IO) {
+                                    com.google.firebase.firestore.FirebaseFirestore.getInstance()
+                                        .collection("users")
+                                        .whereEqualTo("edPub", conversationId)
+                                        .limit(1)
+                                        .get()
+                                        .await()
+                                }
+                                if (!doc.isEmpty) {
+                                    val firebaseUid = doc.documents[0].id
+                                    val email = doc.documents[0].getString("email") ?: ""
+                                    if (contact != null && email.isNotEmpty()) {
+                                        withContext(Dispatchers.IO) {
+                                            db.contacts().upsert(contact.copy(firebaseUid = firebaseUid, email = email))
+                                        }
+                                    }
+                                    value = firebaseUid
+                                }
+                            }
                         } catch (_: Exception) {}
                     }
 
@@ -460,7 +482,28 @@ fun AppEntry(
                         val db = vaultRepository.db ?: return@produceState
                         try {
                             val contact = withContext(Dispatchers.IO) { db.contacts().get(conversationId) }
-                            value = contact?.email ?: ""
+                            val email = contact?.email ?: ""
+                            if (email.isNotEmpty()) {
+                                value = email
+                            } else {
+                                val doc = withContext(Dispatchers.IO) {
+                                    com.google.firebase.firestore.FirebaseFirestore.getInstance()
+                                        .collection("users")
+                                        .whereEqualTo("edPub", conversationId)
+                                        .limit(1)
+                                        .get()
+                                        .await()
+                                }
+                                if (!doc.isEmpty) {
+                                    val fetchedEmail = doc.documents[0].getString("email") ?: ""
+                                    if (contact != null && fetchedEmail.isNotEmpty()) {
+                                        withContext(Dispatchers.IO) {
+                                            db.contacts().upsert(contact.copy(email = fetchedEmail))
+                                        }
+                                    }
+                                    value = fetchedEmail
+                                }
+                            }
                         } catch (_: Exception) {}
                     }
 

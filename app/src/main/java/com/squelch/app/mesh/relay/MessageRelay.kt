@@ -287,6 +287,15 @@ class MessageRelay @Inject constructor(
                 return
             }
 
+            if (command == "ack") {
+                val targetMsgId = json.optString("msgId", "")
+                if (targetMsgId.isNotEmpty()) {
+                    db.messages().updateDelivery(targetMsgId, 2)
+                    Log.d(TAG, "Delivery ack for $targetMsgId from $senderEdPubHex")
+                }
+                return
+            }
+
             if (command == "blocked") {
                 Log.d(TAG, "Received block notification from $senderEdPubHex")
                 blockEvents.trySend(BlockEvent(senderEdPubHex, blocked = true))
@@ -343,6 +352,24 @@ class MessageRelay @Inject constructor(
             db.conversations().incrementUnread(conversationId)
         }
         Log.d(TAG, "Stored message from $resolvedName")
+
+        try {
+            val ackCmd = JSONObject().apply {
+                put("cmd", "ack")
+                put("msgId", message.msgId)
+            }
+            val contact = db.contacts().get(senderEdPubHex)
+            val senderUid = contact?.firebaseUid ?: ""
+            if (senderUid.isNotEmpty()) {
+                sendCommand(
+                    recipientEdPubHex = senderEdPubHex,
+                    recipientUid = senderUid,
+                    senderName = "",
+                    kind = Transport.TransportFrame.KIND_DATA,
+                    payloadBytes = ackCmd.toString().toByteArray(Charsets.UTF_8)
+                )
+            }
+        } catch (_: Exception) {}
 
         try {
             Notifications.showMessageNotification(

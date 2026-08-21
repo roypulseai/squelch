@@ -227,9 +227,10 @@ fun ConversationScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
+                .padding(top = paddingValues.calculateTopPadding())
                 .background(MaterialTheme.colorScheme.background)
                 .imePadding()
+                .navigationBarsPadding()
         ) {
             LazyColumn(
                 modifier = Modifier
