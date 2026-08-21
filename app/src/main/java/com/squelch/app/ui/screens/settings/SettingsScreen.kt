@@ -1,5 +1,6 @@
 package com.squelch.app.ui.screens.settings
 
+import com.squelch.app.BuildConfig
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -165,7 +166,7 @@ fun SettingsScreen(
 
             SectionHeader("About")
             Text(
-                text = "Squelch v1.0.0",
+                text = "Squelch v${BuildConfig.VERSION_NAME}",
                 style = MaterialTheme.typography.bodyLarge,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
                 color = MaterialTheme.colorScheme.onSurfaceVariant
