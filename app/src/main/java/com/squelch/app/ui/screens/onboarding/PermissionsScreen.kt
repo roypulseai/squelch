@@ -2,7 +2,11 @@ package com.squelch.app.ui.screens.onboarding
 
 import android.Manifest
 import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -22,12 +26,15 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -46,13 +53,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import com.squelch.app.ui.theme.Accent
 
 private data class PermissionItem(
     val permission: String,
     val label: String,
     val description: String,
-    val icon: androidx.compose.ui.graphics.vector.ImageVector
+    val icon: androidx.compose.ui.graphics.vector.ImageVector,
+    val minSdk: Int = 0
 )
 
 private const val PREFS_NAME = "permissions_prefs"
@@ -68,6 +77,10 @@ fun markPermissionsAsked(context: Context) {
         .edit().putBoolean(KEY_ASKED, true).apply()
 }
 
+private fun isGranted(context: Context, permission: String): Boolean {
+    return ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
+}
+
 @Composable
 fun PermissionsScreen(
     onAllGranted: () -> Unit,
@@ -75,43 +88,71 @@ fun PermissionsScreen(
 ) {
     val context = LocalContext.current
 
-    val permissions = buildList {
-        add(PermissionItem(
-            permission = Manifest.permission.POST_NOTIFICATIONS,
-            label = "Notifications",
-            description = "Get alerts for new messages and mesh activity",
-            icon = Icons.Default.Notifications
-        ))
-        add(PermissionItem(
-            permission = Manifest.permission.BLUETOOTH_SCAN,
-            label = "Bluetooth Scan",
-            description = "Discover nearby peers for mesh networking",
-            icon = Icons.Default.Bluetooth
-        ))
-        add(PermissionItem(
-            permission = Manifest.permission.BLUETOOTH_ADVERTISE,
-            label = "Bluetooth Advertise",
-            description = "Allow other devices to find you on the mesh",
-            icon = Icons.Default.Bluetooth
-        ))
-        add(PermissionItem(
-            permission = Manifest.permission.BLUETOOTH_CONNECT,
-            label = "Bluetooth Connect",
-            description = "Connect to nearby peers for encrypted chat",
-            icon = Icons.Default.Bluetooth
-        ))
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            add(PermissionItem(
-                permission = Manifest.permission.NEARBY_WIFI_DEVICES,
-                label = "Nearby Wi-Fi",
-                description = "Discover peers via Wi-Fi Direct for faster transfer",
-                icon = Icons.Default.Wifi
-            ))
+    val permissions = remember {
+        buildList {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                add(PermissionItem(
+                    permission = Manifest.permission.POST_NOTIFICATIONS,
+                    label = "Notifications",
+                    description = "Get alerts for new messages",
+                    icon = Icons.Default.Notifications,
+                    minSdk = Build.VERSION_CODES.TIRAMISU
+                ))
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                add(PermissionItem(
+                    permission = Manifest.permission.BLUETOOTH_SCAN,
+                    label = "Bluetooth Scan",
+                    description = "Discover nearby peers for mesh networking",
+                    icon = Icons.Default.Bluetooth,
+                    minSdk = Build.VERSION_CODES.S
+                ))
+                add(PermissionItem(
+                    permission = Manifest.permission.BLUETOOTH_ADVERTISE,
+                    label = "Bluetooth Advertise",
+                    description = "Let other devices find you on the mesh",
+                    icon = Icons.Default.Bluetooth,
+                    minSdk = Build.VERSION_CODES.S
+                ))
+                add(PermissionItem(
+                    permission = Manifest.permission.BLUETOOTH_CONNECT,
+                    label = "Bluetooth Connect",
+                    description = "Connect to nearby peers for encrypted chat",
+                    icon = Icons.Default.Bluetooth,
+                    minSdk = Build.VERSION_CODES.S
+                ))
+            }
+            if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.R) {
+                add(PermissionItem(
+                    permission = Manifest.permission.ACCESS_FINE_LOCATION,
+                    label = "Location",
+                    description = "Required for Bluetooth scanning on Android 11 and below",
+                    icon = Icons.Default.LocationOn,
+                    minSdk = 0
+                ))
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                add(PermissionItem(
+                    permission = Manifest.permission.NEARBY_WIFI_DEVICES,
+                    label = "Nearby Wi-Fi",
+                    description = "Discover peers via Wi-Fi Direct",
+                    icon = Icons.Default.Wifi,
+                    minSdk = Build.VERSION_CODES.TIRAMISU
+                ))
+            }
         }
     }
 
     val permissionState = remember { mutableStateMapOf<String, Boolean?>() }
     var requestCounter by remember { mutableIntStateOf(0) }
+    var hasInteracted by remember { mutableIntStateOf(0) }
+
+    LaunchedEffect(Unit) {
+        permissions.forEach { item ->
+            val granted = isGranted(context, item.permission)
+            permissionState[item.permission] = if (granted) true else null
+        }
+    }
 
     val launcher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
@@ -120,22 +161,25 @@ fun PermissionsScreen(
             permissionState[perm] = granted
         }
         requestCounter++
+        hasInteracted = 1
     }
 
     val decidedCount = permissionState.count { it.value != null }
     val allDecided = decidedCount == permissions.size
     val allGranted = permissions.all { permissionState[it.permission] == true }
+    val anyPermanentlyDenied = permissions.any { item ->
+        permissionState[item.permission] == false &&
+        !isGranted(context, item.permission) &&
+        hasInteracted > 0
+    }
 
-    val undecidedPermissions = remember(decidedCount, requestCounter) {
+    val undecidedPermissions = remember(requestCounter) {
         permissions.filter { permissionState[it.permission] == null }
     }
 
-    LaunchedEffect(Unit) {
-        markPermissionsAsked(context)
-    }
-
     LaunchedEffect(allDecided, allGranted) {
-        if (allDecided && allGranted) {
+        if (allDecided && allGranted && hasInteracted > 0) {
+            markPermissionsAsked(context)
             onAllGranted()
         }
     }
@@ -176,9 +220,9 @@ fun PermissionsScreen(
 
         Text(
             text = if (allDecided) {
-                if (allGranted) "All permissions granted!" else "Some permissions were denied. You can still use Squelch."
+                if (allGranted) "All permissions granted!" else "Some permissions were denied. You can still use Squelch, but mesh features may not work."
             } else {
-                "Squelch needs these permissions to discover nearby peers and deliver messages instantly."
+                "Squelch needs these permissions to discover nearby peers and deliver messages."
             },
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -204,11 +248,33 @@ fun PermissionsScreen(
 
         Spacer(modifier = Modifier.height(32.dp))
 
+        if (anyPermanentlyDenied) {
+            OutlinedButton(
+                onClick = {
+                    val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                        data = Uri.fromParts("package", context.packageName, null)
+                    }
+                    context.startActivity(intent)
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Icon(Icons.Default.Settings, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Open App Settings", fontWeight = FontWeight.SemiBold)
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+
         if (!allDecided) {
             Button(
                 onClick = {
                     val permsToRequest = undecidedPermissions.map { it.permission }.toTypedArray()
-                    launcher.launch(permsToRequest)
+                    if (permsToRequest.isNotEmpty()) {
+                        launcher.launch(permsToRequest)
+                    }
                 },
                 modifier = Modifier
                     .fillMaxWidth()
@@ -226,6 +292,7 @@ fun PermissionsScreen(
 
             TextButton(onClick = {
                 permissions.forEach { permissionState[it.permission] = false }
+                hasInteracted = 1
             }) {
                 Text(
                     text = "Deny All",
@@ -234,7 +301,10 @@ fun PermissionsScreen(
             }
         } else {
             Button(
-                onClick = onSkip,
+                onClick = {
+                    markPermissionsAsked(context)
+                    onSkip()
+                },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(52.dp),

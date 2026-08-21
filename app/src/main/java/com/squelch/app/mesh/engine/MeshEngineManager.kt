@@ -35,7 +35,6 @@ class MeshEngineManager @Inject constructor(
             val transports = mutableListOf<Transport>()
             transports.add(BleTransport(context, edPubHex))
             transports.add(WifiDirectTransport(context, edPubHex))
-            transports.add(FirestoreTransport(edPubHex))
 
             val eng = MeshEngine(identity = identity, transports = transports)
             eng.start()

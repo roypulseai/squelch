@@ -1,5 +1,6 @@
 package com.squelch.app.mesh.relay
 
+import android.content.Context
 import android.util.Log
 import com.squelch.app.crypto.Identity
 import com.squelch.app.data.local.SquelchDatabase
@@ -8,7 +9,9 @@ import com.squelch.app.data.local.entity.MessageEntity
 import com.squelch.app.messaging.MessageRelayHolder
 import com.squelch.app.mesh.transport.FirestoreTransport
 import com.squelch.app.mesh.transport.Transport
+import com.squelch.app.util.Notifications
 import com.squelch.app.util.toHex
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -21,7 +24,9 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class MessageRelay @Inject constructor() {
+class MessageRelay @Inject constructor(
+    @ApplicationContext private val context: Context
+) {
 
     companion object {
         private const val TAG = "MessageRelay"
@@ -180,6 +185,15 @@ class MessageRelay @Inject constructor() {
 
         val plaintext = String(payload, Charsets.UTF_8)
 
+        if (plaintext.contains("\"hs\":") && plaintext.contains("\"s\":") && plaintext.contains("\"r\":")) {
+            Log.d(TAG, "Dropping Noise handshake message from $senderEdPubHex")
+            return
+        }
+        if (plaintext.contains("\"ct\":") && plaintext.contains("\"s\":") && plaintext.contains("\"r\":")) {
+            Log.d(TAG, "Dropping Noise mesh message from $senderEdPubHex")
+            return
+        }
+
         try {
             val json = JSONObject(plaintext)
             val command = json.optString("cmd", "")
@@ -259,5 +273,18 @@ class MessageRelay @Inject constructor() {
             db.conversations().incrementUnread(conversationId)
         }
         Log.d(TAG, "Stored message from $resolvedName")
+
+        try {
+            Notifications.showMessageNotification(
+                context = context,
+                notificationId = conversationId.hashCode(),
+                title = resolvedName,
+                body = plaintext.take(100),
+                conversationId = conversationId
+            )
+            Log.d(TAG, "Notification shown for message from $resolvedName")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to show notification: ${e.message}")
+        }
     }
 }

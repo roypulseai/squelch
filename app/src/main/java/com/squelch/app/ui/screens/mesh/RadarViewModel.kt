@@ -139,6 +139,7 @@ class RadarViewModel @Inject constructor(
             try {
                 val snapshot = FirebaseFirestore.getInstance()
                     .collection("users")
+                    .limit(50)
                     .get()
                     .await()
 
@@ -164,27 +165,36 @@ class RadarViewModel @Inject constructor(
                         isContact = isContact
                     )
                 }
+                Log.d(TAG, "Loaded ${users.size} Squelch users from Firestore")
                 _squelchUsers.value = users
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to load Squelch users: ${e.message}")
+                _squelchUsers.value = emptyList()
             }
         }
     }
 
+    fun refreshSquelchUsers() {
+        loadSquelchUsers()
+    }
+
     private fun observePeerChanges() {
         viewModelScope.launch {
-            val bleFlow = meshEngine?.peers
             val wifiFlow = wifiDirectManager.peers
 
-            if (bleFlow != null) {
-                bleFlow.combine(wifiFlow) { blePeers, wifiPeers ->
-                    Pair(blePeers, wifiPeers)
-                }.collect { (blePeers, wifiPeers) ->
-                    rebuildPeerList(blePeers, wifiPeers)
-                }
-            } else {
-                wifiFlow.collect { wifiPeers ->
-                    rebuildPeerList(emptySet(), wifiPeers)
+            while (isActive) {
+                val engine = meshEngine
+                val bleFlow = engine?.peers
+                if (bleFlow != null) {
+                    bleFlow.combine(wifiFlow) { blePeers, wifiPeers ->
+                        Pair(blePeers, wifiPeers)
+                    }.collect { (blePeers, wifiPeers) ->
+                        rebuildPeerList(blePeers, wifiPeers)
+                    }
+                } else {
+                    wifiFlow.collect { wifiPeers ->
+                        rebuildPeerList(emptySet(), wifiPeers)
+                    }
                 }
             }
         }

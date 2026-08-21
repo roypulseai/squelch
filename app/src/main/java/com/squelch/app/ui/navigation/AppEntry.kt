@@ -621,6 +621,24 @@ fun AppEntry(
                                 }
                             }
                             navController.navigate(Screen.Conversation.createRoute(edPub, displayName, false))
+                        },
+                        onPeerTap = { peerId, peerName ->
+                            MainScope().launch {
+                                withContext(Dispatchers.IO) {
+                                    val db = vaultRepository.db ?: return@withContext
+                                    val existing = db.conversations().get(peerId)
+                                    if (existing == null) {
+                                        db.conversations().upsert(
+                                            com.squelch.app.data.local.entity.ConversationEntity(
+                                                id = peerId,
+                                                name = peerName,
+                                                lastMessageTimestamp = System.currentTimeMillis()
+                                            )
+                                        )
+                                    }
+                                }
+                            }
+                            navController.navigate(Screen.Conversation.createRoute(peerId, peerName, false))
                         }
                     )
                 }

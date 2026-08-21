@@ -58,6 +58,13 @@ class MessageForegroundService : Service() {
         val edPubHex = intent?.getStringExtra("edPubHex")
         if (edPubHex != null) {
             selfEdPubHex = edPubHex
+            getSharedPreferences("squelch_service", MODE_PRIVATE)
+                .edit().putString("edPubHex", edPubHex).apply()
+        } else {
+            selfEdPubHex = getSharedPreferences("squelch_service", MODE_PRIVATE)
+                .getString("edPubHex", "") ?: ""
+        }
+        if (selfEdPubHex.isNotEmpty()) {
             startPolling()
         }
         return START_STICKY
@@ -109,9 +116,21 @@ class MessageForegroundService : Service() {
                         val body = Base64.decode(payloadB64, Base64.NO_WRAP).toString(Charsets.UTF_8)
                         val senderName = doc.getString("senderName") ?: sender.take(8)
                         val senderEmail = doc.getString("senderEmail") ?: ""
+                        val msgId = doc.getString("msgId") ?: UUID.randomUUID().toString()
+
+                        if (body.contains("\"hs\":") && body.contains("\"s\":") && body.contains("\"r\":")) {
+                            doc.reference.delete()
+                            continue
+                        }
+
+                        val existing = try { db.messages().getByMsgId(msgId) } catch (_: Exception) { null }
+                        if (existing != null) {
+                            doc.reference.delete()
+                            continue
+                        }
 
                         scope.launch {
-                            storeMessage(db, sender, sender, senderName, body)
+                            storeMessage(db, sender, sender, senderName, body, msgId)
                             showNewMessageNotification(senderName.ifEmpty { senderEmail }, body, sender)
                         }
                         doc.reference.delete()
@@ -128,12 +147,13 @@ class MessageForegroundService : Service() {
         conversationId: String,
         sender: String,
         senderName: String,
-        body: String
+        body: String,
+        msgId: String = UUID.randomUUID().toString()
     ) {
         withContext(Dispatchers.IO) {
             val msg = MessageEntity(
                 conversationId = conversationId,
-                msgId = UUID.randomUUID().toString(),
+                msgId = msgId,
                 sender = sender,
                 body = body,
                 timestamp = System.currentTimeMillis(),

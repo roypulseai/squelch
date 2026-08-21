@@ -83,7 +83,8 @@ private val BtBlue = Color(0xFF5B8DEF)
 @Composable
 fun RadarScreen(
     viewModel: RadarViewModel = hiltViewModel(),
-    onUserTap: (String, String) -> Unit = { _, _ -> }
+    onUserTap: (String, String) -> Unit = { _, _ -> },
+    onPeerTap: (String, String) -> Unit = { _, _ -> }
 ) {
     val transports by viewModel.transports.collectAsState()
     val peers by viewModel.peers.collectAsState()
@@ -112,7 +113,7 @@ fun RadarScreen(
                 containerColor = MaterialTheme.colorScheme.primary
             ) {
                 Icon(
-                    if (isScanning) Icons.Default.Refresh else Icons.Default.Refresh,
+                    Icons.Default.Refresh,
                     contentDescription = "Scan",
                     modifier = Modifier.rotate(if (isScanning) 360f else 0f)
                 )
@@ -149,13 +150,15 @@ fun RadarScreen(
                 )
             }
 
-            items(transports) { transport ->
+            items(transports, key = { it.name }) { transport ->
                 TransportCard(
                     transport = transport,
-                    onToggle = when (transport.name) {
-                        "Bluetooth LE" -> {{ viewModel.toggleBle() }}
-                        "Wi-Fi Direct" -> {{ viewModel.toggleWifiDirect() }}
-                        else -> null
+                    onToggle = if (transport.name == "Bluetooth LE") {
+                        { viewModel.toggleBle() }
+                    } else if (transport.name == "Wi-Fi Direct") {
+                        { viewModel.toggleWifiDirect() }
+                    } else {
+                        null
                     }
                 )
             }
@@ -192,8 +195,8 @@ fun RadarScreen(
                     EmptyPeersCard(isScanning = isScanning)
                 }
             } else {
-                items(peers) { peer ->
-                    PeerCard(peer = peer)
+                items(peers, key = { it.id }) { peer ->
+                    PeerCard(peer = peer, onTap = { onPeerTap(peer.id, peer.name) })
                 }
             }
 
@@ -254,7 +257,7 @@ fun RadarScreen(
                     }
                 }
             } else {
-                items(squelchUsers) { user ->
+                items(squelchUsers, key = { it.uid }) { user ->
                     SquelchUserCard(
                         user = user,
                         onTap = {
@@ -675,9 +678,11 @@ private fun TransportCard(
 }
 
 @Composable
-private fun PeerCard(peer: RadarViewModel.PeerInfo) {
+private fun PeerCard(peer: RadarViewModel.PeerInfo, onTap: () -> Unit = {}) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onTap() },
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
         )
