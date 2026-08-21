@@ -56,7 +56,9 @@ import com.squelch.app.ui.screens.contacts.ContactsScreen
 import com.squelch.app.ui.screens.contacts.MyQrScreen
 import com.squelch.app.ui.screens.contacts.UserSearchScreen
 import com.squelch.app.ui.screens.mesh.RadarScreen
+import com.squelch.app.ui.screens.mesh.RadarViewModel
 import com.squelch.app.ui.screens.onboarding.BiometricGateScreen
+import com.squelch.app.ui.screens.onboarding.PermissionsScreen
 import com.squelch.app.ui.screens.onboarding.RestoreScreen
 import com.squelch.app.ui.screens.onboarding.SignInScreen
 import com.squelch.app.ui.screens.settings.SettingsScreen
@@ -157,7 +159,7 @@ fun AppEntry(
                     val identity = Identity.fromGoogleUid(signed.googleUid)
                     val edPubHex = identity.edPub.toHex()
                     if (!messageRelay.isRunning) {
-                        messageRelay.start(edPubHex, db, identity)
+                        messageRelay.start(edPubHex, db, identity, signed.email)
                     }
                     if (!MessageForegroundService.isRunning) {
                         android.content.Intent(activity, MessageForegroundService::class.java)
@@ -172,7 +174,7 @@ fun AppEntry(
                             popUpTo(0) { inclusive = true }
                         }
                     } else {
-                        navController.navigate(Screen.Chats.route) {
+                        navController.navigate(Screen.Permissions.route) {
                             popUpTo(0) { inclusive = true }
                         }
                     }
@@ -236,7 +238,7 @@ fun AppEntry(
                     SignInScreen(
                         authRepository = authRepository,
                         onSignedIn = {
-                            navController.navigate(Screen.Chats.route) {
+                            navController.navigate(Screen.Permissions.route) {
                                 popUpTo(Screen.SignIn.route) { inclusive = true }
                             }
                         }
@@ -295,6 +297,21 @@ fun AppEntry(
                     )
                 }
 
+                composable(Screen.Permissions.route) {
+                    PermissionsScreen(
+                        onAllGranted = {
+                            navController.navigate(Screen.Chats.route) {
+                                popUpTo(Screen.Permissions.route) { inclusive = true }
+                            }
+                        },
+                        onSkip = {
+                            navController.navigate(Screen.Chats.route) {
+                                popUpTo(Screen.Permissions.route) { inclusive = true }
+                            }
+                        }
+                    )
+                }
+
                 composable(Screen.Chats.route) {
                     val chatViewModel: ChatViewModel = hiltViewModel()
                     val strangerList by chatViewModel.strangers.collectAsState()
@@ -309,6 +326,7 @@ fun AppEntry(
                             navController.navigate(Screen.Strangers.route)
                         },
                         strangerCount = strangerList.size,
+                        onDeleteConversation = { id -> chatViewModel.deleteConversation(id) },
                         viewModel = chatViewModel
                     )
                 }
@@ -384,7 +402,10 @@ fun AppEntry(
                     )
                 ) { backStackEntry ->
                     val conversationId = backStackEntry.arguments?.getString("conversationId") ?: ""
-                    val conversationName = backStackEntry.arguments?.getString("conversationName") ?: ""
+                    val conversationName = java.net.URLDecoder.decode(
+                        backStackEntry.arguments?.getString("conversationName") ?: "",
+                        "UTF-8"
+                    )
                     val isGroup = backStackEntry.arguments?.getBoolean("isGroup") ?: false
                     val signed = authRepository.signedIn()
                     val selfPubkey = signed?.let {
@@ -484,7 +505,8 @@ fun AppEntry(
                 }
 
                 composable(Screen.Radar.route) {
-                    RadarScreen()
+                    val radarViewModel: RadarViewModel = hiltViewModel()
+                    RadarScreen(viewModel = radarViewModel)
                 }
 
                 composable(Screen.Settings.route) {

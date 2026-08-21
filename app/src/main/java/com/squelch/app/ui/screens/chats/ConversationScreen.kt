@@ -21,9 +21,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.SignalWifi4Bar
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.SignalWifi4Bar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -55,6 +54,10 @@ import com.squelch.app.data.local.entity.MessageEntity
 import com.squelch.app.ui.theme.Accent
 import com.squelch.app.ui.theme.SentBubble
 import com.squelch.app.ui.theme.ReceivedBubble
+import com.squelch.app.ui.theme.SentBubbleLight
+import com.squelch.app.ui.theme.ReceivedBubbleLight
+import com.squelch.app.ui.theme.DarkOnSurface
+import com.squelch.app.ui.theme.LightOnSurface
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -113,7 +116,7 @@ fun ConversationScreen(
                                 overflow = TextOverflow.Ellipsis
                             )
                             Text(
-                                text = "online",
+                                text = if (isGroup) "group" else "online",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -191,7 +194,8 @@ fun ConversationScreen(
                         isSelf = isSelf,
                         isLastInGroup = isLastInGroup,
                         isFirstInGroup = isFirstInGroup,
-                        showSender = isGroup && !isSelf
+                        showSender = isGroup && !isSelf,
+                        senderName = viewModel.getMemberName(msg.sender)
                     )
                 }
             }
@@ -207,14 +211,6 @@ fun ConversationScreen(
                         .padding(horizontal = 8.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.Bottom
                 ) {
-                    IconButton(onClick = { }) {
-                        Icon(
-                            imageVector = Icons.Filled.Mic,
-                            contentDescription = "Voice message",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
                     Box(
                         modifier = Modifier
                             .weight(1f)
@@ -290,10 +286,16 @@ private fun MessageBubble(
     isSelf: Boolean,
     isLastInGroup: Boolean,
     isFirstInGroup: Boolean,
-    showSender: Boolean = false
+    showSender: Boolean = false,
+    senderName: String = ""
 ) {
-    val bgColor = if (isSelf) SentBubble else ReceivedBubble
-    val textColor = MaterialTheme.colorScheme.onSurface
+    val isDark = androidx.compose.foundation.isSystemInDarkTheme()
+    val bgColor = if (isSelf) {
+        if (isDark) SentBubble else SentBubbleLight
+    } else {
+        if (isDark) ReceivedBubble else ReceivedBubbleLight
+    }
+    val textColor = if (isDark) DarkOnSurface else LightOnSurface
 
     val shape = when {
         isSelf && isLastInGroup && isFirstInGroup -> RoundedCornerShape(18.dp, 18.dp, 4.dp, 18.dp)
@@ -327,9 +329,9 @@ private fun MessageBubble(
                 .padding(start = 8.dp, end = 6.dp, top = 6.dp, bottom = 4.dp)
         ) {
             Column {
-                if (showSender) {
+                if (showSender && senderName.isNotEmpty()) {
                     Text(
-                        text = msg.sender.take(8),
+                        text = senderName,
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.primary,
                         fontSize = 11.sp,

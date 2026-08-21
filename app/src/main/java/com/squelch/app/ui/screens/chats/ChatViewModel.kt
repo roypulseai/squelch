@@ -262,4 +262,17 @@ class ChatViewModel @Inject constructor(
             vaultRepository.db?.groups()?.clearUnread(groupId)
         }
     }
+
+    fun getMemberName(pubkey: String): String {
+        if (pubkey == messageRelay.selfEdPubHex) return "You"
+        return pubkey.take(8)
+    }
+
+    fun deleteConversation(conversationId: String) {
+        viewModelScope.launch {
+            val database = vaultRepository.db ?: return@launch
+            database.messages().purgeForConversation(conversationId)
+            database.conversations().delete(conversationId)
+        }
+    }
 }

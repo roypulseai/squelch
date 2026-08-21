@@ -13,7 +13,9 @@ val DarkOnSurface = Color(0xFFE9EDEF)
 val DarkOnSurfaceVariant = Color(0xFF8696A0)
 
 val SentBubble = Color(0xFF005C4B)
-val ReceivedBubble = Color(0xFF1F2C34)
+val SentBubbleLight = Color(0xFFD9FDD3)
+val ReceivedBubble = Color(0xFF2A3942)
+val ReceivedBubbleLight = Color(0xFFFFFFFF)
 
 val LightBackground = Color(0xFFECE5DD)
 val LightSurface = Color(0xFFFFFFFF)

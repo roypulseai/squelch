@@ -34,6 +34,8 @@ class MessageRelay @Inject constructor() {
         private set
     var selfIdentity: Identity? = null
         private set
+    var selfEmail: String = ""
+        private set
 
     val isRunning: Boolean get() = transport != null
 
@@ -47,13 +49,14 @@ class MessageRelay @Inject constructor() {
         }
     }
 
-    fun start(edPubHex: String, database: SquelchDatabase, identity: Identity) {
+    fun start(edPubHex: String, database: SquelchDatabase, identity: Identity, email: String = "") {
         if (transport != null) {
             Log.d(TAG, "Already running for $edPubHex")
             return
         }
         selfEdPubHex = edPubHex
         selfIdentity = identity
+        selfEmail = email
         MessageRelayHolder.database = database
         Log.d(TAG, "Starting relay for self=$edPubHex")
 
@@ -69,7 +72,7 @@ class MessageRelay @Inject constructor() {
                 t.incoming.collect { frame ->
                     Log.d(TAG, "Frame from ${frame.senderEdPubHex}, kind=${frame.kind}, size=${frame.payload.size}")
                     try {
-                        handleIncoming(frame.senderEdPubHex, frame.payload, database)
+                        handleIncoming(frame.senderEdPubHex, frame.payload, frame.senderName, frame.senderEmail, database)
                     } catch (e: Exception) {
                         Log.e(TAG, "Handle incoming failed: ${e.message}", e)
                     }
@@ -140,6 +143,7 @@ class MessageRelay @Inject constructor() {
                 recipientEdPubHex = recipientEdPubHex,
                 recipientUid = recipientUid,
                 senderName = senderName,
+                senderEmail = selfEmail,
                 payload = plaintext.toByteArray(Charsets.UTF_8)
             )
             Log.d(TAG, "Message sent to $recipientEdPubHex")
@@ -149,6 +153,8 @@ class MessageRelay @Inject constructor() {
     private suspend fun handleIncoming(
         senderEdPubHex: String,
         payload: ByteArray,
+        senderName: String?,
+        senderEmail: String?,
         db: SquelchDatabase
     ) {
         if (senderEdPubHex == selfEdPubHex) return
@@ -162,11 +168,13 @@ class MessageRelay @Inject constructor() {
         val plaintext = String(payload, Charsets.UTF_8)
         val conversationId = senderEdPubHex
         val contact = db.contacts().get(senderEdPubHex)
-        val senderName = contact?.callsign?.ifEmpty { null }
+        val resolvedName = contact?.callsign?.ifEmpty { null }
             ?: contact?.displayName?.ifEmpty { null }
+            ?: senderName?.ifEmpty { null }
+            ?: senderEmail?.ifEmpty { null }
             ?: senderEdPubHex.take(8)
 
-        Log.d(TAG, "Storing from $senderName: ${plaintext.take(50)}")
+        Log.d(TAG, "Storing from $resolvedName: ${plaintext.take(50)}")
 
         val message = MessageEntity(
             conversationId = conversationId,
@@ -185,7 +193,7 @@ class MessageRelay @Inject constructor() {
             db.conversations().upsert(
                 ConversationEntity(
                     id = conversationId,
-                    name = senderName,
+                    name = resolvedName,
                     lastMessagePreview = plaintext.take(80),
                     lastMessageTimestamp = message.timestamp,
                     unreadCount = 1
@@ -199,6 +207,6 @@ class MessageRelay @Inject constructor() {
             )
             db.conversations().incrementUnread(conversationId)
         }
-        Log.d(TAG, "Stored message from $senderName")
+        Log.d(TAG, "Stored message from $resolvedName")
     }
 }

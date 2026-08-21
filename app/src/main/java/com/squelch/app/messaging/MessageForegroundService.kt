@@ -9,17 +9,12 @@ import android.content.Intent
 import android.os.IBinder
 import android.util.Base64
 import android.util.Log
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.ListenerRegistration
 import com.squelch.app.MainActivity
 import com.squelch.app.R
-import com.squelch.app.crypto.Identity
 import com.squelch.app.data.local.SquelchDatabase
 import com.squelch.app.data.local.entity.ConversationEntity
 import com.squelch.app.data.local.entity.MessageEntity
-import com.squelch.app.util.Notifications
-import com.squelch.app.util.toHex
+import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.*
 import kotlinx.coroutines.tasks.await
 import java.util.UUID
@@ -46,7 +41,6 @@ class MessageForegroundService : Service() {
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private var listener: ListenerRegistration? = null
     private var pollJob: Job? = null
     private var selfEdPubHex: String = ""
 
@@ -64,74 +58,30 @@ class MessageForegroundService : Service() {
         val edPubHex = intent?.getStringExtra("edPubHex")
         if (edPubHex != null) {
             selfEdPubHex = edPubHex
-            startListening()
+            startPolling()
         }
         return START_STICKY
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        listener?.remove()
-        listener = null
         pollJob?.cancel()
         scope.cancel()
         instance = null
         Log.d(TAG, "Service destroyed")
     }
 
-    private fun startListening() {
+    private fun startPolling() {
         val db = MessageRelayHolder.database ?: run {
             Log.e(TAG, "No database, will retry")
             pollJob = scope.launch {
                 delay(5000)
-                startListening()
+                startPolling()
             }
             return
         }
 
         val firestore = FirebaseFirestore.getInstance()
-
-        listener?.remove()
-        listener = firestore.collection("messages")
-            .whereEqualTo("recipient", selfEdPubHex)
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    Log.e(TAG, "Listener error: ${error.message}")
-                    return@addSnapshotListener
-                }
-
-                val docs = snapshot?.documents
-                if (docs.isNullOrEmpty()) return@addSnapshotListener
-                Log.d(TAG, "Live: ${docs.size} messages")
-
-                scope.launch {
-                    val blocked = try { db.blocked().allPubkeys() } catch (_: Exception) { emptyList() }
-                    for (doc in docs) {
-                        try {
-                            val sender = doc.getString("sender") ?: continue
-                            if (sender == selfEdPubHex) {
-                                doc.reference.delete()
-                                continue
-                            }
-                            if (sender in blocked) {
-                                doc.reference.delete()
-                                continue
-                            }
-                            val payloadB64 = doc.getString("payload") ?: continue
-                            val body = Base64.decode(payloadB64, Base64.NO_WRAP).toString(Charsets.UTF_8)
-                            val senderName = doc.getString("senderName") ?: sender.take(8)
-                            val conversationId = sender
-
-                            storeMessage(db, conversationId, sender, senderName, body)
-                            showNewMessageNotification(senderName, body, conversationId)
-
-                            doc.reference.delete()
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Process doc failed: ${e.message}")
-                        }
-                    }
-                }
-            }
 
         pollJob?.cancel()
         pollJob = scope.launch {
@@ -158,10 +108,11 @@ class MessageForegroundService : Service() {
                         val payloadB64 = doc.getString("payload") ?: continue
                         val body = Base64.decode(payloadB64, Base64.NO_WRAP).toString(Charsets.UTF_8)
                         val senderName = doc.getString("senderName") ?: sender.take(8)
+                        val senderEmail = doc.getString("senderEmail") ?: ""
 
                         scope.launch {
                             storeMessage(db, sender, sender, senderName, body)
-                            showNewMessageNotification(senderName, body, sender)
+                            showNewMessageNotification(senderName.ifEmpty { senderEmail }, body, sender)
                         }
                         doc.reference.delete()
                     }

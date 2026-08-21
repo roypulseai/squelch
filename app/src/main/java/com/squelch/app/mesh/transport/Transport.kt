@@ -12,7 +12,9 @@ interface Transport {
     data class TransportFrame(
         val senderEdPubHex: String,
         val kind: Int,
-        val payload: ByteArray
+        val payload: ByteArray,
+        val senderName: String? = null,
+        val senderEmail: String? = null
     ) {
         companion object {
             const val KIND_HELLO = 1

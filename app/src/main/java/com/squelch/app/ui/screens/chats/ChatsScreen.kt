@@ -21,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.VolumeOff
@@ -32,16 +33,20 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -53,6 +58,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.squelch.app.data.local.entity.ConversationEntity
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -64,6 +70,7 @@ fun ChatsScreen(
     onNavigateToNewChat: () -> Unit = {},
     onNavigateToStrangers: () -> Unit = {},
     strangerCount: Int = 0,
+    onDeleteConversation: (String) -> Unit = {},
     viewModel: ChatViewModel = androidx.hilt.navigation.compose.hiltViewModel()
 ) {
     val conversations by viewModel.conversations.collectAsState()
@@ -223,14 +230,41 @@ fun ChatsScreen(
                     .padding(paddingValues)
             ) {
                 items(sorted, key = { it.id }) { conv ->
-                    val showDivider = sorted.indexOf(conv) < sorted.lastIndex
-
-                    ConversationItem(
-                        conversation = conv,
-                        onClick = { onNavigateToConversation(conv.id, conv.name) }
+                    val dismissState = rememberSwipeToDismissBoxState(
+                        confirmValueChange = {
+                            if (it == SwipeToDismissBoxValue.EndToStart) {
+                                onDeleteConversation(conv.id)
+                                true
+                            } else false
+                        }
                     )
 
-                    if (showDivider) {
+                    SwipeToDismissBox(
+                        state = dismissState,
+                        backgroundContent = {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(MaterialTheme.colorScheme.error)
+                                    .padding(horizontal = 20.dp),
+                                contentAlignment = Alignment.CenterEnd
+                            ) {
+                                Icon(
+                                    Icons.Default.Delete,
+                                    contentDescription = "Delete",
+                                    tint = Color.White
+                                )
+                            }
+                        },
+                        enableDismissFromStartToEnd = false
+                    ) {
+                        ConversationItem(
+                            conversation = conv,
+                            onClick = { onNavigateToConversation(conv.id, conv.name) }
+                        )
+                    }
+
+                    if (sorted.indexOf(conv) < sorted.lastIndex) {
                         HorizontalDivider(
                             modifier = Modifier.padding(start = 76.dp),
                             color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)

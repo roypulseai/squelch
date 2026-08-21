@@ -70,6 +70,8 @@ class FirestoreTransport(
                         val recipientUid = doc.getString("recipientUid") ?: ""
                         val kind = (doc.getLong("kind") ?: Transport.TransportFrame.KIND_DATA).toInt()
 
+                        val senderEmail = doc.getString("senderEmail") ?: ""
+
                         Log.d(TAG, "Incoming from $sender ($senderName), ${payload.size} bytes")
 
                         scope?.launch {
@@ -77,7 +79,9 @@ class FirestoreTransport(
                                 Transport.TransportFrame(
                                     senderEdPubHex = sender,
                                     kind = kind,
-                                    payload = payload
+                                    payload = payload,
+                                    senderName = senderName,
+                                    senderEmail = senderEmail
                                 )
                             )
                             Log.d(TAG, "Emitted frame from $sender")
@@ -125,6 +129,7 @@ class FirestoreTransport(
         recipientEdPubHex: String,
         recipientUid: String,
         senderName: String,
+        senderEmail: String,
         payload: ByteArray
     ) {
         val fireDb = db ?: run {
@@ -136,6 +141,7 @@ class FirestoreTransport(
             "recipient" to recipientEdPubHex,
             "recipientUid" to recipientUid,
             "senderName" to senderName,
+            "senderEmail" to senderEmail,
             "payload" to Base64.encodeToString(payload, Base64.NO_WRAP),
             "timestamp" to com.google.firebase.Timestamp.now(),
             "kind" to Transport.TransportFrame.KIND_DATA
