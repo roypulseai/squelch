@@ -138,17 +138,15 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            SectionHeader("Chats")
+            SectionHeader("Backup & Restore")
             SettingsItem(
                 icon = Icons.Default.Backup,
                 title = "Backup to Google Drive",
-                subtitle = "Save vault & messages to your Drive",
+                subtitle = "Save your encrypted vault & message history",
                 trailing = {
                     if (isBackingUp) {
                         CircularProgressIndicator(
-                            modifier = Modifier
-                                .padding(end = 8.dp)
-                                .size(20.dp),
+                            modifier = Modifier.padding(end = 8.dp).size(20.dp),
                             strokeWidth = 2.dp
                         )
                     }
@@ -158,7 +156,7 @@ fun SettingsScreen(
             SettingsItem(
                 icon = Icons.Default.CloudDownload,
                 title = "Restore from Google Drive",
-                subtitle = "Restore contacts & messages from backup",
+                subtitle = "Restore contacts & messages on a new device",
                 onClick = onRestore
             )
 

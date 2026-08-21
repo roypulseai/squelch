@@ -355,6 +355,8 @@ fun AppEntry(
                         },
                         strangerCount = strangerList.size,
                         onDeleteConversation = { id -> chatViewModel.deleteConversation(id) },
+                        onTogglePin = { id -> chatViewModel.togglePin(id) },
+                        onToggleMute = { id -> chatViewModel.toggleMute(id) },
                         viewModel = chatViewModel
                     )
                 }
@@ -543,6 +545,7 @@ fun AppEntry(
                 }
 
                 composable(Screen.Contacts.route) {
+                    val contactsChatViewModel: ChatViewModel = hiltViewModel()
                     ContactsScreen(
                         contacts = contacts,
                         onNavigateToAddContact = { navController.navigate(Screen.AddContact.route) },
@@ -567,6 +570,9 @@ fun AppEntry(
                                 }
                             }
                             navController.navigate(Screen.Conversation.createRoute(convId, convName, false))
+                        },
+                        onDeleteContact = { pubkey ->
+                            contactsChatViewModel.deleteContact(pubkey)
                         }
                     )
                 }

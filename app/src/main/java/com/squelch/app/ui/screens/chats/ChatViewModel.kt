@@ -493,6 +493,32 @@ class ChatViewModel @Inject constructor(
         }
     }
 
+    fun togglePin(conversationId: String) {
+        viewModelScope.launch {
+            val database = vaultRepository.db ?: return@launch
+            val conv = database.conversations().get(conversationId) ?: return@launch
+            database.conversations().setPinned(conversationId, !conv.pinned)
+        }
+    }
+
+    fun toggleMute(conversationId: String) {
+        viewModelScope.launch {
+            val database = vaultRepository.db ?: return@launch
+            val conv = database.conversations().get(conversationId) ?: return@launch
+            database.conversations().setMuted(conversationId, !conv.muted)
+        }
+    }
+
+    fun deleteContact(pubkey: String) {
+        viewModelScope.launch {
+            val database = vaultRepository.db ?: return@launch
+            database.contacts().delete(pubkey)
+            database.messages().purgeForConversation(pubkey)
+            database.conversations().delete(pubkey)
+            vaultRepository.pushContactsToCloud()
+        }
+    }
+
     fun recallMessage(msgId: String, conversationId: String, recipientUid: String) {
         viewModelScope.launch {
             val database = vaultRepository.db ?: return@launch
