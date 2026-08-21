@@ -437,7 +437,7 @@ fun AppEntry(
                         kotlinx.coroutines.runBlocking {
                             try {
                                 val contact = vaultRepository.db?.contacts()?.get(conversationId)
-                                email = contact?.displayName ?: ""
+                                email = contact?.email ?: ""
                             } catch (_: Exception) {}
                         }
                         email
@@ -523,6 +523,7 @@ fun AppEntry(
                                         )
                                     )
                                 }
+                                vaultRepository.pushContactsToCloud()
                             }
                             navController.popBackStack()
                         },
@@ -545,10 +546,12 @@ fun AppEntry(
                                             xPub = result.xPub,
                                             callsign = result.displayName,
                                             displayName = result.displayName,
+                                            email = result.email,
                                             lastSeen = System.currentTimeMillis()
                                         )
                                     )
                                 }
+                                vaultRepository.pushContactsToCloud()
                             }
                         }
                     )
@@ -574,7 +577,27 @@ fun AppEntry(
 
                 composable(Screen.Radar.route) {
                     val radarViewModel: RadarViewModel = hiltViewModel()
-                    RadarScreen(viewModel = radarViewModel)
+                    RadarScreen(
+                        viewModel = radarViewModel,
+                        onUserTap = { edPub, displayName ->
+                            MainScope().launch {
+                                withContext(Dispatchers.IO) {
+                                    val db = vaultRepository.db ?: return@withContext
+                                    val existing = db.conversations().get(edPub)
+                                    if (existing == null) {
+                                        db.conversations().upsert(
+                                            com.squelch.app.data.local.entity.ConversationEntity(
+                                                id = edPub,
+                                                name = displayName,
+                                                lastMessageTimestamp = System.currentTimeMillis()
+                                            )
+                                        )
+                                    }
+                                }
+                            }
+                            navController.navigate(Screen.Conversation.createRoute(edPub, displayName, false))
+                        }
+                    )
                 }
 
                 composable(Screen.Settings.route) {

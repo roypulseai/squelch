@@ -112,11 +112,16 @@ class SquelchMessagingService : FirebaseMessagingService() {
                 android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
             )
 
+            val defaultSoundUri = android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_NOTIFICATION)
+
             val notification = androidx.core.app.NotificationCompat.Builder(this, com.squelch.app.util.Notifications.CHANNEL_MESSAGES)
                 .setSmallIcon(com.squelch.app.R.drawable.ic_launcher_foreground)
                 .setContentTitle(title)
                 .setContentText(body)
                 .setPriority(androidx.core.app.NotificationCompat.PRIORITY_HIGH)
+                .setSound(defaultSoundUri)
+                .setVibrate(longArrayOf(0, 250, 250, 250))
+                .setDefaults(androidx.core.app.NotificationCompat.DEFAULT_ALL)
                 .setContentIntent(pending)
                 .setAutoCancel(true)
                 .build()

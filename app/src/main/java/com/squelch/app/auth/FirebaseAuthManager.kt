@@ -36,7 +36,9 @@ class FirebaseAuthManager @Inject constructor(
             .requestEmail()
             .requestProfile()
             .build()
-        return GoogleSignIn.getClient(context, gso).signInIntent
+        val client = GoogleSignIn.getClient(context, gso)
+        client.signOut()
+        return client.signInIntent
     }
 
     suspend fun firebaseAuthWithGoogle(idToken: String): AuthState {

@@ -1,10 +1,10 @@
 package com.squelch.app.ui.screens.onboarding
 
 import android.Manifest
+import android.content.Context
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.Button
@@ -33,12 +34,14 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -52,11 +55,26 @@ private data class PermissionItem(
     val icon: androidx.compose.ui.graphics.vector.ImageVector
 )
 
+private const val PREFS_NAME = "permissions_prefs"
+private const val KEY_ASKED = "permissions_asked"
+
+fun hasPermissionsAsked(context: Context): Boolean {
+    return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        .getBoolean(KEY_ASKED, false)
+}
+
+fun markPermissionsAsked(context: Context) {
+    context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        .edit().putBoolean(KEY_ASKED, true).apply()
+}
+
 @Composable
 fun PermissionsScreen(
     onAllGranted: () -> Unit,
     onSkip: () -> Unit
 ) {
+    val context = LocalContext.current
+
     val permissions = buildList {
         add(PermissionItem(
             permission = Manifest.permission.POST_NOTIFICATIONS,
@@ -92,25 +110,32 @@ fun PermissionsScreen(
         }
     }
 
-    val grantedState = remember { mutableStateMapOf<String, Boolean>() }
+    val permissionState = remember { mutableStateMapOf<String, Boolean?>() }
+    var requestCounter by remember { mutableIntStateOf(0) }
 
     val launcher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { results ->
         results.forEach { (perm, granted) ->
-            grantedState[perm] = granted
+            permissionState[perm] = granted
         }
+        requestCounter++
     }
 
-    val allGranted = permissions.all { grantedState[it.permission] == true }
+    val decidedCount = permissionState.count { it.value != null }
+    val allDecided = decidedCount == permissions.size
+    val allGranted = permissions.all { permissionState[it.permission] == true }
+
+    val undecidedPermissions = remember(decidedCount, requestCounter) {
+        permissions.filter { permissionState[it.permission] == null }
+    }
 
     LaunchedEffect(Unit) {
-        val permsToRequest = permissions.map { it.permission }.toTypedArray()
-        launcher.launch(permsToRequest)
+        markPermissionsAsked(context)
     }
 
-    LaunchedEffect(allGranted) {
-        if (allGranted) {
+    LaunchedEffect(allDecided, allGranted) {
+        if (allDecided && allGranted) {
             onAllGranted()
         }
     }
@@ -150,7 +175,11 @@ fun PermissionsScreen(
         Spacer(modifier = Modifier.height(8.dp))
 
         Text(
-            text = "Squelch needs these permissions to discover nearby peers and deliver messages instantly.",
+            text = if (allDecided) {
+                if (allGranted) "All permissions granted!" else "Some permissions were denied. You can still use Squelch."
+            } else {
+                "Squelch needs these permissions to discover nearby peers and deliver messages instantly."
+            },
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center
@@ -163,37 +192,60 @@ fun PermissionsScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             permissions.forEach { item ->
-                val isGranted = grantedState[item.permission] == true
+                val isGranted = permissionState[item.permission] == true
+                val isDenied = permissionState[item.permission] == false
                 PermissionRow(
                     item = item,
-                    isGranted = isGranted
+                    isGranted = isGranted,
+                    isDenied = isDenied
                 )
             }
         }
 
         Spacer(modifier = Modifier.height(32.dp))
 
-        Button(
-            onClick = { launcher.launch(permissions.map { it.permission }.toTypedArray()) },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(52.dp),
-            shape = RoundedCornerShape(12.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = Accent)
-        ) {
-            Text(
-                text = if (allGranted) "All Permissions Granted" else "Grant Permissions",
-                fontWeight = FontWeight.SemiBold
-            )
-        }
+        if (!allDecided) {
+            Button(
+                onClick = {
+                    val permsToRequest = undecidedPermissions.map { it.permission }.toTypedArray()
+                    launcher.launch(permsToRequest)
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Accent)
+            ) {
+                Text(
+                    text = "Grant Permissions",
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
 
-        Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
-        TextButton(onClick = onSkip) {
-            Text(
-                text = "Skip for now",
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            TextButton(onClick = {
+                permissions.forEach { permissionState[it.permission] = false }
+            }) {
+                Text(
+                    text = "Deny All",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        } else {
+            Button(
+                onClick = onSkip,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Accent)
+            ) {
+                Text(
+                    text = "Continue",
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
         }
     }
 }
@@ -201,15 +253,16 @@ fun PermissionsScreen(
 @Composable
 private fun PermissionRow(
     item: PermissionItem,
-    isGranted: Boolean
+    isGranted: Boolean,
+    isDenied: Boolean
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
-        color = if (isGranted) {
-            Accent.copy(alpha = 0.08f)
-        } else {
-            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        color = when {
+            isGranted -> Accent.copy(alpha = 0.08f)
+            isDenied -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)
+            else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
         }
     ) {
         Row(
@@ -221,16 +274,27 @@ private fun PermissionRow(
             Surface(
                 modifier = Modifier.size(40.dp),
                 shape = CircleShape,
-                color = if (isGranted) Accent.copy(alpha = 0.2f)
-                    else MaterialTheme.colorScheme.surface
+                color = when {
+                    isGranted -> Accent.copy(alpha = 0.2f)
+                    isDenied -> MaterialTheme.colorScheme.error.copy(alpha = 0.15f)
+                    else -> MaterialTheme.colorScheme.surface
+                }
             ) {
                 Icon(
-                    imageVector = if (isGranted) Icons.Default.Check else item.icon,
+                    imageVector = when {
+                        isGranted -> Icons.Default.Check
+                        isDenied -> Icons.Default.Close
+                        else -> item.icon
+                    },
                     contentDescription = null,
                     modifier = Modifier
                         .size(22.dp)
                         .padding(9.dp),
-                    tint = if (isGranted) Accent else MaterialTheme.colorScheme.onSurfaceVariant
+                    tint = when {
+                        isGranted -> Accent
+                        isDenied -> MaterialTheme.colorScheme.error
+                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                    }
                 )
             }
 
@@ -244,9 +308,17 @@ private fun PermissionRow(
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
-                    text = item.description,
+                    text = when {
+                        isGranted -> "Granted"
+                        isDenied -> "Denied"
+                        else -> item.description
+                    },
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = when {
+                        isGranted -> Accent
+                        isDenied -> MaterialTheme.colorScheme.error
+                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                    },
                     fontSize = 12.sp
                 )
             }

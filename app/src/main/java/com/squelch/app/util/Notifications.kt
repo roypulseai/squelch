@@ -5,6 +5,7 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.media.RingtoneManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import com.squelch.app.MainActivity
@@ -16,6 +17,15 @@ object Notifications {
 
     fun createChannels(context: Context) {
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val defaultSoundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+
+        val prefs = context.getSharedPreferences("notif_channel_prefs", android.content.Context.MODE_PRIVATE)
+        if (!prefs.getBoolean("channel_recreated_v2", false)) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                nm.deleteNotificationChannel(CHANNEL_MESSAGES)
+            }
+            prefs.edit().putBoolean("channel_recreated_v2", true).apply()
+        }
 
         val messagesChannel = NotificationChannel(
             CHANNEL_MESSAGES,
@@ -24,6 +34,11 @@ object Notifications {
         ).apply {
             description = "Incoming chat messages"
             enableVibration(true)
+            vibrationPattern = longArrayOf(0, 250, 250, 250)
+            setSound(defaultSoundUri, android.media.AudioAttributes.Builder()
+                .setUsage(android.media.AudioAttributes.USAGE_NOTIFICATION)
+                .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                .build())
         }
 
         val serviceChannel = NotificationChannel(
@@ -46,6 +61,7 @@ object Notifications {
         conversationId: String
     ) {
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val defaultSoundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
 
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -61,6 +77,9 @@ object Notifications {
             .setContentTitle(title)
             .setContentText(body)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setSound(defaultSoundUri)
+            .setVibrate(longArrayOf(0, 250, 250, 250))
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
             .build()

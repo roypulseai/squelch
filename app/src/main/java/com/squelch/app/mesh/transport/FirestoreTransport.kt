@@ -71,6 +71,7 @@ class FirestoreTransport(
                         val kind = (doc.getLong("kind") ?: Transport.TransportFrame.KIND_DATA).toInt()
 
                         val senderEmail = doc.getString("senderEmail") ?: ""
+                        val msgId = doc.getString("msgId")
 
                         Log.d(TAG, "Incoming from $sender ($senderName), ${payload.size} bytes")
 
@@ -81,7 +82,8 @@ class FirestoreTransport(
                                     kind = kind,
                                     payload = payload,
                                     senderName = senderName,
-                                    senderEmail = senderEmail
+                                    senderEmail = senderEmail,
+                                    msgId = msgId
                                 )
                             )
                             Log.d(TAG, "Emitted frame from $sender")
@@ -131,13 +133,14 @@ class FirestoreTransport(
         senderName: String,
         senderEmail: String,
         payload: ByteArray,
-        kind: Int = Transport.TransportFrame.KIND_DATA
+        kind: Int = Transport.TransportFrame.KIND_DATA,
+        msgId: String? = null
     ) {
         val fireDb = db ?: run {
             Log.e(TAG, "Cannot send: Firestore not initialized")
             return
         }
-        val data = mapOf(
+        val data = mutableMapOf<String, Any>(
             "sender" to edPubHex,
             "recipient" to recipientEdPubHex,
             "recipientUid" to recipientUid,
@@ -147,6 +150,9 @@ class FirestoreTransport(
             "timestamp" to com.google.firebase.Timestamp.now(),
             "kind" to kind
         )
+        if (msgId != null) {
+            data["msgId"] = msgId
+        }
         Log.d(TAG, "Sending with meta to $recipientEdPubHex (uid=$recipientUid, kind=$kind)")
         fireDb.collection(COLLECTION)
             .add(data)

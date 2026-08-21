@@ -10,6 +10,7 @@ import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.Scopes
 import com.google.android.gms.common.api.ApiException
 import com.google.android.gms.common.api.Scope
+import com.squelch.app.util.CompressionUtil
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -168,8 +169,10 @@ class DriveBackupManager @Inject constructor(
     suspend fun backupVault(vaultBlob: ByteArray): Boolean = withContext(Dispatchers.IO) {
         try {
             val token = getAccessToken() ?: return@withContext false
+            val compressed = CompressionUtil.compress(vaultBlob)
+            Log.d(TAG, "Vault compressed: ${vaultBlob.size} -> ${compressed.size} bytes")
             deleteFileByName(token, VAULT_FILE_NAME)
-            uploadFile(token, VAULT_FILE_NAME, vaultBlob)
+            uploadFile(token, VAULT_FILE_NAME, compressed)
         } catch (e: Exception) {
             Log.e(TAG, "backupVault error", e)
             false
@@ -184,8 +187,10 @@ class DriveBackupManager @Inject constructor(
             }
             val token = getAccessToken() ?: return@withContext false
             val bytes = dbFile.readBytes()
+            val compressed = CompressionUtil.compress(bytes)
+            Log.d(TAG, "Messages DB compressed: ${bytes.size} -> ${compressed.size} bytes")
             deleteFileByName(token, MESSAGE_FILE_NAME)
-            uploadFile(token, MESSAGE_FILE_NAME, bytes)
+            uploadFile(token, MESSAGE_FILE_NAME, compressed)
         } catch (e: Exception) {
             Log.e(TAG, "backupMessages error", e)
             false
@@ -195,7 +200,12 @@ class DriveBackupManager @Inject constructor(
     suspend fun restoreVault(): ByteArray? = withContext(Dispatchers.IO) {
         try {
             val token = getAccessToken() ?: return@withContext null
-            downloadFileByName(token, VAULT_FILE_NAME)
+            val bytes = downloadFileByName(token, VAULT_FILE_NAME) ?: return@withContext null
+            try {
+                CompressionUtil.decompress(bytes)
+            } catch (_: Exception) {
+                bytes
+            }
         } catch (e: Exception) {
             Log.e(TAG, "restoreVault error", e)
             null
@@ -206,10 +216,15 @@ class DriveBackupManager @Inject constructor(
         try {
             val token = getAccessToken() ?: return@withContext null
             val bytes = downloadFileByName(token, MESSAGE_FILE_NAME) ?: return@withContext null
+            val decompressed = try {
+                CompressionUtil.decompress(bytes)
+            } catch (_: Exception) {
+                bytes
+            }
             val cacheDir = File(context.cacheDir, "drive_restore")
             if (!cacheDir.exists()) cacheDir.mkdirs()
             val outFile = File(cacheDir, MESSAGE_FILE_NAME)
-            outFile.writeBytes(bytes)
+            outFile.writeBytes(decompressed)
             outFile
         } catch (e: Exception) {
             Log.e(TAG, "restoreMessages error", e)

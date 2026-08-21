@@ -10,6 +10,7 @@ import com.squelch.app.crypto.VaultCipher
 import com.squelch.app.crypto.VaultPayload
 import com.squelch.app.crypto.VaultSession
 import com.squelch.app.data.local.SquelchDatabase
+import com.squelch.app.data.remote.ContactSyncManager
 import com.squelch.app.data.remote.FirestoreVaultManager
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
@@ -19,6 +20,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import javax.inject.Inject
@@ -29,6 +31,7 @@ class VaultRepository @Inject constructor(
     @ApplicationContext private val context: Context,
     private val authRepository: AuthRepository,
     private val firestoreVaultManager: FirestoreVaultManager,
+    private val contactSyncManager: ContactSyncManager,
     private val biometricManager: BiometricManager,
     private val biometricVaultManager: BiometricVaultManager
 ) {
@@ -134,10 +137,10 @@ class VaultRepository @Inject constructor(
             database = SquelchDatabase.create(context, kDb)
             _dbReady.value = database
             hasBeenUnlocked = true
-
+            syncContactsFromCloud()
             _state.value = VaultState.Unlocked
         } catch (e: Exception) {
-            Log.e(TAG, "autoUnlock failed: ${e.message}", e)
+            Log.e(TAG, "autoUnlock failed: ${e.message}")
             _state.value = VaultState.Error("Unlock failed: ${e.message}")
         }
     }
@@ -167,6 +170,7 @@ class VaultRepository @Inject constructor(
                             database = SquelchDatabase.create(context, kDb)
                             _dbReady.value = database
                             hasBeenUnlocked = true
+                            scope.launch { syncContactsFromCloud() }
                             _state.value = VaultState.Unlocked
                         }
                     } catch (e: Exception) {
@@ -252,6 +256,39 @@ class VaultRepository @Inject constructor(
     fun clearError() {
         if (_state.value is VaultState.Error) {
             _state.value = if (VaultSession.isUnlocked) VaultState.Unlocked else VaultState.BiometricRequired
+        }
+    }
+
+    suspend fun syncContactsFromCloud() {
+        val googleUid = authRepository.signedIn()?.googleUid ?: return
+        val db = database ?: return
+        try {
+            val remoteContacts = contactSyncManager.pullContacts(googleUid)
+            if (remoteContacts.isNotEmpty()) {
+                for (c in remoteContacts) {
+                    val local = db.contacts().get(c.pubkey)
+                    if (local == null) {
+                        db.contacts().upsert(c)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "syncContactsFromCloud failed: ${e.message}")
+        }
+    }
+
+    suspend fun pushContactsToCloud() {
+        val googleUid = authRepository.signedIn()?.googleUid ?: return
+        val db = database ?: return
+        try {
+            val contacts = withContext(Dispatchers.IO) {
+                db.contacts().getAll()
+            }
+            if (contacts.isNotEmpty()) {
+                contactSyncManager.pushContacts(googleUid, contacts)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "pushContactsToCloud failed: ${e.message}")
         }
     }
 }

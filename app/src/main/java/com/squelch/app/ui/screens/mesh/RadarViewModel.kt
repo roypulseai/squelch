@@ -7,8 +7,10 @@ import android.net.wifi.WifiManager
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.firebase.firestore.FirebaseFirestore
 import com.squelch.app.auth.AuthRepository
 import com.squelch.app.crypto.Identity
+import com.squelch.app.data.local.entity.ContactEntity
 import com.squelch.app.data.repository.VaultRepository
 import com.squelch.app.mesh.engine.MeshEngine
 import com.squelch.app.mesh.transport.WifiDirectManager
@@ -22,6 +24,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
@@ -52,6 +55,14 @@ class RadarViewModel @Inject constructor(
         val transport: String,
         val signalStrength: Int,
         val lastSeen: Long,
+        val isContact: Boolean
+    )
+
+    data class SquelchUser(
+        val uid: String,
+        val email: String,
+        val displayName: String,
+        val edPub: String,
         val isContact: Boolean
     )
 
@@ -87,6 +98,9 @@ class RadarViewModel @Inject constructor(
     private val _wifiDirectEnabled = MutableStateFlow(true)
     val wifiDirectEnabled: StateFlow<Boolean> = _wifiDirectEnabled.asStateFlow()
 
+    private val _squelchUsers = MutableStateFlow<List<SquelchUser>>(emptyList())
+    val squelchUsers: StateFlow<List<SquelchUser>> = _squelchUsers.asStateFlow()
+
     private var startTime = System.currentTimeMillis()
     private var messageCount = 0
 
@@ -97,6 +111,7 @@ class RadarViewModel @Inject constructor(
 
         observePeerChanges()
         startTransportPolling()
+        loadSquelchUsers()
 
         viewModelScope.launch {
             delay(2000)
@@ -110,6 +125,46 @@ class RadarViewModel @Inject constructor(
         val googleUid = authRepository.signedIn()?.googleUid ?: return
         val identity = Identity.fromGoogleUid(googleUid)
         _selfPubkey.value = identity.edPub.toHex()
+    }
+
+    private fun loadSquelchUsers() {
+        viewModelScope.launch {
+            val selfUid = authRepository.signedIn()?.googleUid ?: return@launch
+            val db = vaultRepository.db
+
+            try {
+                val snapshot = FirebaseFirestore.getInstance()
+                    .collection("users")
+                    .get()
+                    .await()
+
+                val contactUids = withContext(Dispatchers.IO) {
+                    try {
+                        db?.contacts()?.firebaseUids() ?: emptyList()
+                    } catch (_: Exception) { emptyList() }
+                }.toSet()
+
+                val users = snapshot.documents.mapNotNull { doc ->
+                    val uid = doc.id
+                    if (uid == selfUid) return@mapNotNull null
+                    val email = doc.getString("email") ?: return@mapNotNull null
+                    val displayName = doc.getString("displayName") ?: email.substringBefore("@")
+                    val edPub = doc.getString("edPub") ?: ""
+                    val isContact = uid in contactUids
+
+                    SquelchUser(
+                        uid = uid,
+                        email = email,
+                        displayName = displayName,
+                        edPub = edPub,
+                        isContact = isContact
+                    )
+                }
+                _squelchUsers.value = users
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to load Squelch users: ${e.message}")
+            }
+        }
     }
 
     private fun observePeerChanges() {

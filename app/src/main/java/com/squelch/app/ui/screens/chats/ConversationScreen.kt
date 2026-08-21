@@ -472,16 +472,9 @@ fun ConversationScreen(
                     color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        if (conversationId.isNotEmpty()) {
-                            InfoRow(label = "User ID", value = conversationId)
-                            Spacer(modifier = Modifier.height(10.dp))
-                        }
-                        if (recipientUid.isNotEmpty()) {
-                            InfoRow(label = "Firebase UID", value = recipientUid)
-                            Spacer(modifier = Modifier.height(10.dp))
-                        }
-                        if (recipientEmail.isNotEmpty() && recipientEmail != conversationName) {
-                            InfoRow(label = "Display Name", value = recipientEmail)
+                        if (recipientEmail.isNotEmpty()) {
+                            val emailUsername = recipientEmail.substringBefore("@")
+                            InfoRow(label = "User", value = emailUsername)
                         }
                     }
                 }

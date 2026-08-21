@@ -26,4 +26,10 @@ interface ContactDao {
 
     @Query("SELECT pubkey FROM contacts")
     suspend fun pubkeys(): List<String>
+
+    @Query("SELECT firebaseUid FROM contacts WHERE firebaseUid != ''")
+    suspend fun firebaseUids(): List<String>
+
+    @Query("SELECT * FROM contacts")
+    suspend fun getAll(): List<ContactEntity>
 }

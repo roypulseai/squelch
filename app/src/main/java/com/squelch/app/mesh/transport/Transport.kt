@@ -14,7 +14,8 @@ interface Transport {
         val kind: Int,
         val payload: ByteArray,
         val senderName: String? = null,
-        val senderEmail: String? = null
+        val senderEmail: String? = null,
+        val msgId: String? = null
     ) {
         companion object {
             const val KIND_HELLO = 1

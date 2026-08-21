@@ -82,7 +82,8 @@ private val BtBlue = Color(0xFF5B8DEF)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RadarScreen(
-    viewModel: RadarViewModel = hiltViewModel()
+    viewModel: RadarViewModel = hiltViewModel(),
+    onUserTap: (String, String) -> Unit = { _, _ -> }
 ) {
     val transports by viewModel.transports.collectAsState()
     val peers by viewModel.peers.collectAsState()
@@ -91,6 +92,7 @@ fun RadarScreen(
     val bleEnabled by viewModel.bleEnabled.collectAsState()
     val wifiDirectEnabled by viewModel.wifiDirectEnabled.collectAsState()
     val selfPubkey by viewModel.selfPubkey.collectAsState()
+    val squelchUsers by viewModel.squelchUsers.collectAsState()
 
     Scaffold(
         topBar = {
@@ -192,6 +194,73 @@ fun RadarScreen(
             } else {
                 items(peers) { peer ->
                     PeerCard(peer = peer)
+                }
+            }
+
+            item {
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "Squelch Users",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = RadarGreen.copy(alpha = 0.12f)
+                    ) {
+                        Text(
+                            text = "${squelchUsers.size}",
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = RadarGreen
+                        )
+                    }
+                }
+            }
+
+            if (squelchUsers.isEmpty()) {
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "No users found",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Other Squelch users will appear here",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                }
+            } else {
+                items(squelchUsers) { user ->
+                    SquelchUserCard(
+                        user = user,
+                        onTap = {
+                            onUserTap(user.edPub, user.displayName)
+                        }
+                    )
                 }
             }
 
@@ -687,6 +756,81 @@ private fun PeerCard(peer: RadarViewModel.PeerInfo) {
 
             // Signal strength indicator
             SignalBars(strength = peer.signalStrength)
+        }
+    }
+}
+
+@Composable
+private fun SquelchUserCard(
+    user: RadarViewModel.SquelchUser,
+    onTap: () -> Unit
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onTap() },
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(RadarGreen.copy(alpha = 0.2f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = user.displayName.firstOrNull()?.uppercase() ?: "?",
+                    color = RadarGreen,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = user.displayName,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    if (user.isContact) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = RadarGreen.copy(alpha = 0.15f)
+                        ) {
+                            Text(
+                                text = "CONTACT",
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = RadarGreen,
+                                fontSize = 8.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(2.dp))
+                val username = user.email.substringBefore("@")
+                Text(
+                    text = "@$username",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 }

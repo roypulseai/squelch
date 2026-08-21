@@ -72,7 +72,7 @@ class MessageRelay @Inject constructor() {
                 t.incoming.collect { frame ->
                     Log.d(TAG, "Frame from ${frame.senderEdPubHex}, kind=${frame.kind}, size=${frame.payload.size}")
                     try {
-                        handleIncoming(frame.senderEdPubHex, frame.payload, frame.senderName, frame.senderEmail, database)
+                        handleIncoming(frame.senderEdPubHex, frame.payload, frame.senderName, frame.senderEmail, database, frame.msgId)
                     } catch (e: Exception) {
                         Log.e(TAG, "Handle incoming failed: ${e.message}", e)
                     }
@@ -99,7 +99,8 @@ class MessageRelay @Inject constructor() {
         recipientEdPubHex: String,
         recipientUid: String,
         senderName: String,
-        plaintext: String
+        plaintext: String,
+        msgId: String? = null
     ) {
         val t = transport ?: run {
             Log.e(TAG, "Transport not running, cannot send")
@@ -112,7 +113,8 @@ class MessageRelay @Inject constructor() {
                 recipientUid = recipientUid,
                 senderName = senderName,
                 senderEmail = selfEmail,
-                payload = plaintext.toByteArray(Charsets.UTF_8)
+                payload = plaintext.toByteArray(Charsets.UTF_8),
+                msgId = msgId
             )
             Log.d(TAG, "Message sent to $recipientEdPubHex")
         }
@@ -147,7 +149,8 @@ class MessageRelay @Inject constructor() {
         payload: ByteArray,
         senderName: String?,
         senderEmail: String?,
-        db: SquelchDatabase
+        db: SquelchDatabase,
+        incomingMsgId: String? = null
     ) {
         if (senderEdPubHex == selfEdPubHex) return
 
@@ -196,7 +199,7 @@ class MessageRelay @Inject constructor() {
 
         val message = MessageEntity(
             conversationId = conversationId,
-            msgId = UUID.randomUUID().toString(),
+            msgId = incomingMsgId ?: UUID.randomUUID().toString(),
             sender = senderEdPubHex,
             body = plaintext,
             timestamp = System.currentTimeMillis(),
