@@ -1,6 +1,13 @@
 package com.squelch.app.ui.screens.chats
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.widget.Toast
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -9,11 +16,15 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
@@ -22,23 +33,31 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.automirrored.filled.Forward
 import androidx.compose.material.icons.filled.SignalWifi4Bar
-import androidx.compose.foundation.clickable
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -46,27 +65,31 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.squelch.app.data.local.entity.ConversationEntity
 import com.squelch.app.data.local.entity.MessageEntity
 import com.squelch.app.ui.theme.Accent
-import com.squelch.app.ui.theme.SentBubble
-import com.squelch.app.ui.theme.ReceivedBubble
-import com.squelch.app.ui.theme.SentBubbleLight
-import com.squelch.app.ui.theme.ReceivedBubbleLight
 import com.squelch.app.ui.theme.DarkOnSurface
 import com.squelch.app.ui.theme.LightOnSurface
+import com.squelch.app.ui.theme.ReceivedBubble
+import com.squelch.app.ui.theme.ReceivedBubbleLight
+import com.squelch.app.ui.theme.SentBubble
+import com.squelch.app.ui.theme.SentBubbleLight
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun ConversationScreen(
     conversationId: String,
@@ -77,13 +100,35 @@ fun ConversationScreen(
     networkType: String = "Internet",
     isGroup: Boolean = false,
     onBack: () -> Unit = {},
+    onGroupInfoClick: () -> Unit = {},
     viewModel: ChatViewModel = hiltViewModel()
 ) {
     val messages by viewModel.messages(conversationId).collectAsState()
-    var inputText by remember { mutableStateOf("") }
+    var inputField by remember { mutableStateOf(TextFieldValue("")) }
     val listState = rememberLazyListState()
+    val context = LocalContext.current
+
     var showUserInfo by remember { mutableStateOf(false) }
     val userInfoSheetState = rememberModalBottomSheetState()
+
+    var showActionsFor by remember { mutableStateOf<MessageEntity?>(null) }
+
+    var showEditDialog by remember { mutableStateOf(false) }
+    var editingMsg by remember { mutableStateOf<MessageEntity?>(null) }
+    var editText by remember { mutableStateOf("") }
+
+    var showRecallConfirm by remember { mutableStateOf(false) }
+    var recallingMsg by remember { mutableStateOf<MessageEntity?>(null) }
+
+    var showForwardSheet by remember { mutableStateOf(false) }
+    var forwardingMsg by remember { mutableStateOf<MessageEntity?>(null) }
+
+    val groupMembers by viewModel.getGroupMembers(conversationId).collectAsState()
+    var mentionQuery by remember { mutableStateOf("") }
+    var showMentionDropdown by remember { mutableStateOf(false) }
+    var mentionStartIndex by remember { mutableIntStateOf(-1) }
+
+    val inputText = inputField.text
 
     LaunchedEffect(messages.size) {
         if (messages.isNotEmpty()) {
@@ -102,8 +147,9 @@ fun ConversationScreen(
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.clickable(
-                            enabled = !isGroup,
-                            onClick = { showUserInfo = true }
+                            onClick = {
+                                if (isGroup) onGroupInfoClick() else showUserInfo = true
+                            }
                         )
                     ) {
                         Box(
@@ -128,7 +174,7 @@ fun ConversationScreen(
                                 overflow = TextOverflow.Ellipsis
                             )
                             Text(
-                                text = if (isGroup) "group" else "online",
+                                text = if (isGroup) "group \u00b7 ${groupMembers.size} members" else "online",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -173,6 +219,8 @@ fun ConversationScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
                 .background(MaterialTheme.colorScheme.background)
+                .imePadding()
+                .navigationBarsPadding()
         ) {
             LazyColumn(
                 modifier = Modifier
@@ -207,8 +255,80 @@ fun ConversationScreen(
                         isLastInGroup = isLastInGroup,
                         isFirstInGroup = isFirstInGroup,
                         showSender = isGroup && !isSelf,
-                        senderName = viewModel.getMemberName(msg.sender)
+                        senderName = viewModel.getMemberName(msg.sender),
+                        onLongPress = { showActionsFor = msg }
                     )
+                }
+            }
+
+            if (showMentionDropdown && isGroup) {
+                val filtered = groupMembers.filter { member ->
+                    member.displayName.contains(mentionQuery, ignoreCase = true) ||
+                        member.edPubHex.take(8).contains(mentionQuery, ignoreCase = true)
+                }
+                if (filtered.isNotEmpty()) {
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp),
+                        shape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp),
+                        color = MaterialTheme.colorScheme.surface,
+                        shadowElevation = 8.dp
+                    ) {
+                        LazyColumn(
+                            modifier = Modifier.heightIn(max = 180.dp)
+                        ) {
+                            items(filtered, key = { it.edPubHex }) { member ->
+                                    Surface(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                val name = member.displayName.ifEmpty { member.edPubHex.take(8) }
+                                                val before = inputText.substring(0, mentionStartIndex)
+                                                val after = inputText.substring(inputField.selection.end)
+                                                val newCursorPos = before.length + name.length + 1
+                                            inputField = TextFieldValue(
+                                                text = "${before}@${name} $after",
+                                                selection = TextRange(newCursorPos)
+                                            )
+                                            showMentionDropdown = false
+                                            mentionQuery = ""
+                                            mentionStartIndex = -1
+                                        },
+                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(28.dp)
+                                                .clip(CircleShape)
+                                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            val displayName = member.displayName.ifEmpty { member.edPubHex.take(8) }
+                                            Text(
+                                                text = displayName.firstOrNull()?.uppercase() ?: "?",
+                                                color = MaterialTheme.colorScheme.onPrimary,
+                                                style = MaterialTheme.typography.labelSmall
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.width(10.dp))
+                                        val displayName = member.displayName.ifEmpty { member.edPubHex.take(8) }
+                                        Text(
+                                            text = displayName,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
@@ -238,8 +358,30 @@ fun ConversationScreen(
                             )
                         }
                         BasicTextField(
-                            value = inputText,
-                            onValueChange = { inputText = it },
+                            value = inputField,
+                            onValueChange = { newValue ->
+                                val oldText = inputField.text
+                                val newText = newValue.text
+                                val cursorPos = newValue.selection.end
+
+                                inputField = newValue
+
+                                if (isGroup && groupMembers.isNotEmpty()) {
+                                    val atPos = newText.lastIndexOf('@', cursorPos - 1)
+                                    if (atPos >= 0 && (atPos == 0 || newText[atPos - 1] == ' ' || newText[atPos - 1] == '\n')) {
+                                        val query = newText.substring(atPos + 1, cursorPos)
+                                        if (!query.contains(' ') && !query.contains('\n')) {
+                                            mentionQuery = query
+                                            mentionStartIndex = atPos
+                                            showMentionDropdown = true
+                                        } else {
+                                            showMentionDropdown = false
+                                        }
+                                    } else {
+                                        showMentionDropdown = false
+                                    }
+                                }
+                            },
                             modifier = Modifier.fillMaxWidth(),
                             textStyle = TextStyle(
                                 color = MaterialTheme.colorScheme.onSurface,
@@ -267,7 +409,8 @@ fun ConversationScreen(
                                         plaintext = inputText.trim()
                                     )
                                 }
-                                inputText = ""
+                                inputField = TextFieldValue("")
+                                showMentionDropdown = false
                             }
                         },
                         modifier = Modifier
@@ -346,6 +489,285 @@ fun ConversationScreen(
             }
         }
     }
+
+    showActionsFor?.let { msg ->
+        MessageActionsSheet(
+            msg = msg,
+            onDismiss = { showActionsFor = null },
+            onCopy = {
+                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                val clip = ClipData.newPlainText("message", msg.body)
+                clipboard.setPrimaryClip(clip)
+                Toast.makeText(context, "Copied", Toast.LENGTH_SHORT).show()
+                showActionsFor = null
+            },
+            onRecall = {
+                recallingMsg = msg
+                showRecallConfirm = true
+                showActionsFor = null
+            },
+            onEdit = {
+                editingMsg = msg
+                editText = msg.body
+                showEditDialog = true
+                showActionsFor = null
+            },
+            onForward = {
+                forwardingMsg = msg
+                showForwardSheet = true
+                showActionsFor = null
+            },
+            isSelf = msg.direction == 1
+        )
+    }
+
+    if (showRecallConfirm) {
+        AlertDialog(
+            onDismissRequest = { showRecallConfirm = false },
+            title = { Text("Recall Message") },
+            text = { Text("This message will be deleted for everyone. This cannot be undone.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    recallingMsg?.let { msg ->
+                        viewModel.recallMessage(
+                            msgId = msg.msgId,
+                            conversationId = conversationId,
+                            recipientUid = recipientUid
+                        )
+                    }
+                    showRecallConfirm = false
+                    recallingMsg = null
+                }) {
+                    Text("Recall", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showRecallConfirm = false
+                    recallingMsg = null
+                }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    if (showEditDialog) {
+        AlertDialog(
+            onDismissRequest = { showEditDialog = false },
+            title = { Text("Edit Message") },
+            text = {
+                TextField(
+                    value = editText,
+                    onValueChange = { editText = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = TextFieldDefaults.colors(
+                        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant
+                    ),
+                    maxLines = 6
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    editingMsg?.let { msg ->
+                        viewModel.editMessage(
+                            msgId = msg.msgId,
+                            newText = editText.trim(),
+                            conversationId = conversationId,
+                            recipientUid = recipientUid
+                        )
+                    }
+                    showEditDialog = false
+                    editingMsg = null
+                    editText = ""
+                }) {
+                    Text("Save", color = Accent)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showEditDialog = false
+                    editingMsg = null
+                    editText = ""
+                }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    if (showForwardSheet) {
+        val allConversations by viewModel.conversations.collectAsState()
+        ForwardSheet(
+            conversations = allConversations,
+            onDismiss = {
+                showForwardSheet = false
+                forwardingMsg = null
+            },
+            onSelect = { conv ->
+                forwardingMsg?.let { msg ->
+                    viewModel.forwardMessage(
+                        originalBody = msg.body,
+                        conversationId = conv.id,
+                        recipientUid = "",
+                        senderName = conv.name
+                    )
+                }
+                Toast.makeText(context, "Forwarded", Toast.LENGTH_SHORT).show()
+                showForwardSheet = false
+                forwardingMsg = null
+            }
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MessageActionsSheet(
+    msg: MessageEntity,
+    onDismiss: () -> Unit,
+    onCopy: () -> Unit,
+    onRecall: () -> Unit,
+    onEdit: () -> Unit,
+    onForward: () -> Unit,
+    isSelf: Boolean
+) {
+    val sheetState = rememberModalBottomSheetState()
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+        ) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .padding(bottom = 12.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            ) {
+                Text(
+                    text = msg.body,
+                    modifier = Modifier.padding(16.dp),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 6,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            ActionRow(icon = Icons.Filled.ContentCopy, label = "Copy", onClick = onCopy)
+            if (isSelf) {
+                ActionRow(icon = Icons.Filled.Edit, label = "Edit", onClick = onEdit)
+                ActionRow(icon = Icons.Filled.Delete, label = "Recall", onClick = onRecall, tint = MaterialTheme.colorScheme.error)
+            }
+            ActionRow(icon = Icons.AutoMirrored.Filled.Forward, label = "Forward", onClick = onForward)
+            Spacer(modifier = Modifier.height(12.dp))
+        }
+    }
+}
+
+@Composable
+private fun ActionRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    onClick: () -> Unit,
+    tint: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.onSurface
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp)
+            .clip(RoundedCornerShape(8.dp)),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .combinedClickable(onClick = onClick)
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                modifier = Modifier.size(20.dp),
+                tint = tint
+            )
+            Spacer(modifier = Modifier.width(16.dp))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyLarge,
+                color = tint
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ForwardSheet(
+    conversations: List<ConversationEntity>,
+    onDismiss: () -> Unit,
+    onSelect: (ConversationEntity) -> Unit
+) {
+    val sheetState = rememberModalBottomSheetState()
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+        ) {
+            Text(
+                text = "Forward to",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(bottom = 12.dp)
+            )
+            LazyColumn(modifier = Modifier.fillMaxWidth()) {
+                items(conversations, key = { it.id }) { conv ->
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 2.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .combinedClickable(onClick = { onSelect(conv) }),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.primary),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = conv.name.firstOrNull()?.uppercase() ?: "?",
+                                    color = MaterialTheme.colorScheme.onPrimary,
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                text = conv.name,
+                                style = MaterialTheme.typography.bodyLarge,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+    }
 }
 
 @Composable
@@ -368,6 +790,7 @@ private fun InfoRow(label: String, value: String) {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun MessageBubble(
     msg: MessageEntity,
@@ -375,7 +798,8 @@ private fun MessageBubble(
     isLastInGroup: Boolean,
     isFirstInGroup: Boolean,
     showSender: Boolean = false,
-    senderName: String = ""
+    senderName: String = "",
+    onLongPress: () -> Unit = {}
 ) {
     val isDark = androidx.compose.foundation.isSystemInDarkTheme()
     val bgColor = if (isSelf) {
@@ -414,6 +838,10 @@ private fun MessageBubble(
                 .widthIn(max = 300.dp)
                 .clip(shape)
                 .background(bgColor)
+                .combinedClickable(
+                    onClick = {},
+                    onLongClick = onLongPress
+                )
                 .padding(start = 8.dp, end = 6.dp, top = 6.dp, bottom = 4.dp)
         ) {
             Column {

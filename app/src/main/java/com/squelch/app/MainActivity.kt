@@ -9,6 +9,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.ProcessLifecycleOwner
 import com.squelch.app.auth.AuthRepository
 import com.squelch.app.data.remote.DriveBackupManager
 import com.squelch.app.data.remote.FirestoreVaultManager
@@ -39,6 +42,16 @@ class MainActivity : FragmentActivity() {
         super.onCreate(savedInstanceState)
         Log.d(TAG, "onCreate start")
         handleIntent(intent)
+
+        val lifecycleObserver = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_STOP -> {
+                    vaultRepository.lockForBackground()
+                }
+                else -> {}
+            }
+        }
+        ProcessLifecycleOwner.get().lifecycle.addObserver(lifecycleObserver)
 
         try {
             setContent {

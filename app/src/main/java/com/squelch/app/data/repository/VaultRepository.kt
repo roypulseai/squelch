@@ -59,6 +59,9 @@ class VaultRepository @Inject constructor(
     val isUnlocked: Boolean get() = VaultSession.isUnlocked
     val isLockEnabled: Boolean get() = biometricVaultManager.isLockEnabled()
 
+    @Volatile
+    private var hasBeenUnlocked = false
+
     fun checkVaultState() {
         val signed = authRepository.signedIn() ?: return
         _state.value = VaultState.Loading
@@ -85,6 +88,22 @@ class VaultRepository @Inject constructor(
         }
     }
 
+    fun lockForBackground() {
+        if (!biometricVaultManager.isLockEnabled()) return
+        if (!hasBeenUnlocked) return
+        if (_state.value !is VaultState.Unlocked) return
+
+        Log.d(TAG, "Locking vault for background")
+        _state.value = VaultState.BiometricRequired
+    }
+
+    fun resumeFromBackground(activity: FragmentActivity) {
+        if (_state.value is VaultState.BiometricRequired && biometricVaultManager.isLockEnabled()) {
+            Log.d(TAG, "Resuming from background, requiring biometric")
+            unlockWithBiometric(activity)
+        }
+    }
+
     private suspend fun provisionVault(googleUid: String) {
         try {
             val payload = VaultPayload()
@@ -95,6 +114,7 @@ class VaultRepository @Inject constructor(
             VaultSession.unlock(kDb = kDb, googleUid = googleUid)
             database = SquelchDatabase.create(context, kDb)
             _dbReady.value = database
+            hasBeenUnlocked = true
 
             _state.value = VaultState.Unlocked
         } catch (e: Exception) {
@@ -113,6 +133,7 @@ class VaultRepository @Inject constructor(
             VaultSession.unlock(kDb = kDb, googleUid = googleUid)
             database = SquelchDatabase.create(context, kDb)
             _dbReady.value = database
+            hasBeenUnlocked = true
 
             _state.value = VaultState.Unlocked
         } catch (e: Exception) {
@@ -137,12 +158,17 @@ class VaultRepository @Inject constructor(
                 onSuccess = { result ->
                     val resultCipher = result.cryptoObject?.cipher ?: return@authenticateWithCipher
                     try {
-                        val kDb = biometricVaultManager.decryptKey(resultCipher)
-                        val googleUid = authRepository.signedIn()?.googleUid ?: return@authenticateWithCipher
-                        VaultSession.unlock(kDb = kDb, googleUid = googleUid)
-                        database = SquelchDatabase.create(context, kDb)
-                        _dbReady.value = database
-                        _state.value = VaultState.Unlocked
+                        if (database != null) {
+                            _state.value = VaultState.Unlocked
+                        } else {
+                            val kDb = biometricVaultManager.decryptKey(resultCipher)
+                            val googleUid = authRepository.signedIn()?.googleUid ?: return@authenticateWithCipher
+                            VaultSession.unlock(kDb = kDb, googleUid = googleUid)
+                            database = SquelchDatabase.create(context, kDb)
+                            _dbReady.value = database
+                            hasBeenUnlocked = true
+                            _state.value = VaultState.Unlocked
+                        }
                     } catch (e: Exception) {
                         Log.e(TAG, "decrypt kDb failed: ${e.message}", e)
                         _state.value = VaultState.Error("Unlock failed: ${e.message}")

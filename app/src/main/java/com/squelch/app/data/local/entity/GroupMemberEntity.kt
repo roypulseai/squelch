@@ -19,5 +19,11 @@ data class GroupMemberEntity(
     val groupId: String,
     val edPubHex: String,
     val displayName: String = "",
+    val role: Int = 0,
     val joinedAt: Long = System.currentTimeMillis()
-)
+) {
+    companion object {
+        const val ROLE_MEMBER = 0
+        const val ROLE_ADMIN = 1
+    }
+}

@@ -27,6 +27,10 @@ sealed class Screen(val route: String) {
     data object Restore : Screen("restore")
     data object Permissions : Screen("permissions")
     data object Strangers : Screen("strangers")
+    data object GroupInfo : Screen("group_info/{groupId}/{groupName}") {
+        fun createRoute(groupId: String, groupName: String): String =
+            "group_info/$groupId/${java.net.URLEncoder.encode(groupName, "UTF-8")}"
+    }
 }
 
 data class BottomNavItem(

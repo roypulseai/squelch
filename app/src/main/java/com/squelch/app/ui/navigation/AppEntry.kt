@@ -48,6 +48,7 @@ import com.squelch.app.qr.QrContact
 import com.squelch.app.ui.screens.chats.ChatsScreen
 import com.squelch.app.ui.screens.chats.ConversationScreen
 import com.squelch.app.ui.screens.chats.CreateGroupScreen
+import com.squelch.app.ui.screens.chats.GroupInfoScreen
 import com.squelch.app.ui.screens.chats.NewChatScreen
 import com.squelch.app.ui.screens.chats.StrangerMessagesScreen
 import com.squelch.app.ui.screens.chats.ChatViewModel
@@ -177,6 +178,14 @@ fun AppEntry(
                         navController.navigate(Screen.Permissions.route) {
                             popUpTo(0) { inclusive = true }
                         }
+                    }
+                }
+            }
+            is VaultState.BiometricRequired -> {
+                val current = navController.currentDestination?.route
+                if (current != Screen.Unlock.route && current != Screen.SignIn.route) {
+                    navController.navigate(Screen.Unlock.route) {
+                        popUpTo(0) { inclusive = true }
                     }
                 }
             }
@@ -441,7 +450,31 @@ fun AppEntry(
                         recipientUid = recipientUid,
                         recipientEmail = recipientEmail,
                         isGroup = isGroup,
-                        onBack = { navController.popBackStack() }
+                        onBack = { navController.popBackStack() },
+                        onGroupInfoClick = {
+                            navController.navigate(Screen.GroupInfo.createRoute(conversationId, conversationName))
+                        }
+                    )
+                }
+
+                composable(
+                    route = Screen.GroupInfo.route,
+                    arguments = listOf(
+                        navArgument("groupId") { type = NavType.StringType },
+                        navArgument("groupName") { type = NavType.StringType }
+                    )
+                ) { backStackEntry ->
+                    val groupId = backStackEntry.arguments?.getString("groupId") ?: ""
+                    val groupName = java.net.URLDecoder.decode(
+                        backStackEntry.arguments?.getString("groupName") ?: "",
+                        "UTF-8"
+                    )
+                    val chatViewModel: ChatViewModel = hiltViewModel()
+                    GroupInfoScreen(
+                        groupId = groupId,
+                        groupName = groupName,
+                        onBack = { navController.popBackStack() },
+                        viewModel = chatViewModel
                     )
                 }
 

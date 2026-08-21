@@ -7,12 +7,14 @@ import com.squelch.app.data.local.entity.ConversationEntity
 import com.squelch.app.data.local.entity.MessageEntity
 import com.squelch.app.messaging.MessageRelayHolder
 import com.squelch.app.mesh.transport.FirestoreTransport
+import com.squelch.app.mesh.transport.Transport
 import com.squelch.app.util.toHex
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import org.json.JSONObject
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -116,6 +118,30 @@ class MessageRelay @Inject constructor() {
         }
     }
 
+    fun sendCommand(
+        recipientEdPubHex: String,
+        recipientUid: String,
+        senderName: String,
+        kind: Int,
+        payloadBytes: ByteArray
+    ) {
+        val t = transport ?: run {
+            Log.e(TAG, "Transport not running, cannot send command")
+            return
+        }
+        scope?.launch {
+            t.sendWithMeta(
+                recipientEdPubHex = recipientEdPubHex,
+                recipientUid = recipientUid,
+                senderName = senderName,
+                senderEmail = selfEmail,
+                payload = payloadBytes,
+                kind = kind
+            )
+            Log.d(TAG, "Command sent (kind=$kind) to $recipientEdPubHex")
+        }
+    }
+
     private suspend fun handleIncoming(
         senderEdPubHex: String,
         payload: ByteArray,
@@ -132,6 +158,32 @@ class MessageRelay @Inject constructor() {
         }
 
         val plaintext = String(payload, Charsets.UTF_8)
+
+        try {
+            val json = JSONObject(plaintext)
+            val command = json.optString("cmd", "")
+
+            if (command == "recall") {
+                val targetMsgId = json.optString("msgId", "")
+                if (targetMsgId.isNotEmpty()) {
+                    db.messages().delete(targetMsgId)
+                    Log.d(TAG, "Recalled message $targetMsgId from $senderEdPubHex")
+                }
+                return
+            }
+
+            if (command == "edit") {
+                val targetMsgId = json.optString("msgId", "")
+                val newText = json.optString("text", "")
+                if (targetMsgId.isNotEmpty() && newText.isNotEmpty()) {
+                    db.messages().updateBody(targetMsgId, newText)
+                    Log.d(TAG, "Edited message $targetMsgId from $senderEdPubHex")
+                }
+                return
+            }
+        } catch (_: Exception) {
+        }
+
         val conversationId = senderEdPubHex
         val contact = db.contacts().get(senderEdPubHex)
         val resolvedName = contact?.callsign?.ifEmpty { null }

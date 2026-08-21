@@ -130,7 +130,8 @@ class FirestoreTransport(
         recipientUid: String,
         senderName: String,
         senderEmail: String,
-        payload: ByteArray
+        payload: ByteArray,
+        kind: Int = Transport.TransportFrame.KIND_DATA
     ) {
         val fireDb = db ?: run {
             Log.e(TAG, "Cannot send: Firestore not initialized")
@@ -144,9 +145,9 @@ class FirestoreTransport(
             "senderEmail" to senderEmail,
             "payload" to Base64.encodeToString(payload, Base64.NO_WRAP),
             "timestamp" to com.google.firebase.Timestamp.now(),
-            "kind" to Transport.TransportFrame.KIND_DATA
+            "kind" to kind
         )
-        Log.d(TAG, "Sending with meta to $recipientEdPubHex (uid=$recipientUid)")
+        Log.d(TAG, "Sending with meta to $recipientEdPubHex (uid=$recipientUid, kind=$kind)")
         fireDb.collection(COLLECTION)
             .add(data)
             .addOnSuccessListener { Log.d(TAG, "Sent with meta successfully") }
