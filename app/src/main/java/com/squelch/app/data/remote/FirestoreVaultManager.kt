@@ -48,13 +48,28 @@ class FirestoreVaultManager @Inject constructor() {
         }
     }
 
+    suspend fun deleteVault(googleUid: String) {
+        try {
+            db.collection(COLLECTION).document(googleUid).delete().await()
+            Log.d(TAG, "Vault deleted for $googleUid")
+        } catch (e: Exception) {
+            Log.e(TAG, "deleteVault failed: ${e.message}", e)
+        }
+    }
+
     suspend fun downloadVault(googleUid: String): ByteArray? {
         return try {
             val doc = db.collection(COLLECTION).document(googleUid).get().await()
 
             val compressed = doc.getString(FIELD_VAULT)
             if (compressed != null) {
-                return CompressionUtil.decompress(Base64.decode(compressed, Base64.NO_WRAP))
+                val raw = Base64.decode(compressed, Base64.NO_WRAP)
+                return try {
+                    CompressionUtil.decompress(raw)
+                } catch (_: Exception) {
+                    Log.w(TAG, "Vault not GZIP compressed, using raw bytes")
+                    raw
+                }
             }
 
             val legacy = doc.getString(FIELD_VAULT_LEGACY)

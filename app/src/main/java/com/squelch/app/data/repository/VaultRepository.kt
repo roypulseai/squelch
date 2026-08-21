@@ -109,6 +109,7 @@ class VaultRepository @Inject constructor(
 
     private suspend fun provisionVault(googleUid: String) {
         try {
+            SquelchDatabase.deleteDatabase(context)
             val payload = VaultPayload()
             val ciphertext = VaultCipher.encryptVault(googleUid, payload)
             firestoreVaultManager.uploadVault(googleUid, ciphertext)
@@ -129,9 +130,22 @@ class VaultRepository @Inject constructor(
     private suspend fun autoUnlock(googleUid: String) {
         try {
             val blob = firestoreVaultManager.downloadVault(googleUid)
-                ?: throw IllegalStateException("Vault not found")
+            if (blob == null) {
+                Log.w(TAG, "Vault download returned null, provisioning new vault")
+                SquelchDatabase.deleteDatabase(context)
+                provisionVault(googleUid)
+                return
+            }
 
-            VaultCipher.decryptVault(googleUid, blob)
+            try {
+                VaultCipher.decryptVault(googleUid, blob)
+            } catch (e: Exception) {
+                Log.w(TAG, "Vault decryption failed, re-provisioning: ${e.message}")
+                firestoreVaultManager.deleteVault(googleUid)
+                SquelchDatabase.deleteDatabase(context)
+                provisionVault(googleUid)
+                return
+            }
             val kDb = VaultCipher.deriveKDb(googleUid)
             VaultSession.unlock(kDb = kDb, googleUid = googleUid)
             database = SquelchDatabase.create(context, kDb)
