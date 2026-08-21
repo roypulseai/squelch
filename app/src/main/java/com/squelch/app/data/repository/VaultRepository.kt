@@ -274,35 +274,48 @@ class VaultRepository @Inject constructor(
     }
 
     suspend fun syncContactsFromCloud() {
-        val googleUid = authRepository.signedIn()?.googleUid ?: return
-        val db = database ?: return
+        val googleUid = authRepository.signedIn()?.googleUid ?: run {
+            Log.w(TAG, "syncContactsFromCloud: no signed in user")
+            return
+        }
+        val db = database ?: run {
+            Log.w(TAG, "syncContactsFromCloud: no database")
+            return
+        }
         try {
             val remoteContacts = contactSyncManager.pullContacts(googleUid)
+            Log.d(TAG, "syncContactsFromCloud: pulled ${remoteContacts.size} contacts from cloud")
             if (remoteContacts.isNotEmpty()) {
                 for (c in remoteContacts) {
                     val local = db.contacts().get(c.pubkey)
                     if (local == null) {
                         db.contacts().upsert(c)
+                        Log.d(TAG, "syncContactsFromCloud: imported contact ${c.displayName}")
                     }
                 }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "syncContactsFromCloud failed: ${e.message}")
+            Log.e(TAG, "syncContactsFromCloud failed: ${e.message}", e)
         }
     }
 
     suspend fun pushContactsToCloud() {
-        val googleUid = authRepository.signedIn()?.googleUid ?: return
-        val db = database ?: return
+        val googleUid = authRepository.signedIn()?.googleUid ?: run {
+            Log.w(TAG, "pushContactsToCloud: no signed in user")
+            return
+        }
+        val db = database ?: run {
+            Log.w(TAG, "pushContactsToCloud: no database")
+            return
+        }
         try {
             val contacts = withContext(Dispatchers.IO) {
                 db.contacts().getAll()
             }
-            if (contacts.isNotEmpty()) {
-                contactSyncManager.pushContacts(googleUid, contacts)
-            }
+            Log.d(TAG, "pushContactsToCloud: pushing ${contacts.size} contacts to cloud")
+            contactSyncManager.pushContacts(googleUid, contacts)
         } catch (e: Exception) {
-            Log.e(TAG, "pushContactsToCloud failed: ${e.message}")
+            Log.e(TAG, "pushContactsToCloud failed: ${e.message}", e)
         }
     }
 }

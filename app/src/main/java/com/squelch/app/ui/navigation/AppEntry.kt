@@ -1,6 +1,7 @@
 package com.squelch.app.ui.navigation
 
 import android.app.Activity
+import android.util.Log
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -533,17 +534,27 @@ fun AppEntry(
                         onQrScanned = { contact ->
                             MainScope().launch {
                                 withContext(Dispatchers.IO) {
-                                    vaultRepository.db?.contacts()?.upsert(
+                                    val db = vaultRepository.db
+                                    val existing = db?.contacts()?.get(contact.edPub)
+                                    db?.contacts()?.upsert(
                                         ContactEntity(
                                             pubkey = contact.edPub,
+                                            firebaseUid = existing?.firebaseUid ?: "",
                                             xPub = contact.xPub,
                                             callsign = contact.callsign,
                                             displayName = contact.displayName,
+                                            email = existing?.email ?: "",
                                             lastSeen = System.currentTimeMillis()
                                         )
                                     )
+                                    Log.d("AppEntry", "QR contact upserted: ${contact.displayName}")
                                 }
-                                vaultRepository.pushContactsToCloud()
+                                try {
+                                    vaultRepository.pushContactsToCloud()
+                                    Log.d("AppEntry", "Contacts pushed to cloud after QR scan")
+                                } catch (e: Exception) {
+                                    Log.e("AppEntry", "Push contacts failed: ${e.message}", e)
+                                }
                             }
                             navController.popBackStack()
                         },
@@ -570,8 +581,14 @@ fun AppEntry(
                                             lastSeen = System.currentTimeMillis()
                                         )
                                     )
+                                    Log.d("AppEntry", "Email contact upserted: ${result.displayName}")
                                 }
-                                vaultRepository.pushContactsToCloud()
+                                try {
+                                    vaultRepository.pushContactsToCloud()
+                                    Log.d("AppEntry", "Contacts pushed to cloud after email search")
+                                } catch (e: Exception) {
+                                    Log.e("AppEntry", "Push contacts failed: ${e.message}", e)
+                                }
                             }
                         }
                     )

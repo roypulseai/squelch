@@ -40,15 +40,14 @@ class ContactSyncManager @Inject constructor() {
             val json = arr.toString().toByteArray(Charsets.UTF_8)
             val compressed = CompressionUtil.compressToBase64(json)
             val data = mapOf(
-                FIELD_V to compressed,
-                FIELD to com.google.firebase.firestore.FieldValue.delete()
+                FIELD_V to compressed
             )
             db.collection("users").document(googleUid)
                 .set(data, com.google.firebase.firestore.SetOptions.merge())
                 .await()
-            Log.d(TAG, "Pushed ${contacts.size} contacts (${compressed.length} chars compressed)")
+            Log.d(TAG, "Pushed ${contacts.size} contacts to users/$googleUid (${compressed.length} chars)")
         } catch (e: Exception) {
-            Log.e(TAG, "pushContacts failed: ${e.message}")
+            Log.e(TAG, "pushContacts failed: ${e.message}", e)
         }
     }
 
