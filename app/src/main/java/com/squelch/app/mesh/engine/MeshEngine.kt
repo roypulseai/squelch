@@ -34,6 +34,8 @@ class MeshEngine(
     private var scope: CoroutineScope? = null
     private val sessions = ConcurrentHashMap<String, NoiseSession>()
     private val rng = SecureRandom()
+    @Volatile private var isRunning = false
+    val running: Boolean get() = isRunning
 
     private val _peers = MutableStateFlow<Set<String>>(emptySet())
     val peers: StateFlow<Set<String>> = _peers.asStateFlow()
@@ -48,6 +50,8 @@ class MeshEngine(
     )
 
     fun start() {
+        if (isRunning) return
+        isRunning = true
         val s = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         scope = s
         for (transport in transports) {
@@ -70,6 +74,8 @@ class MeshEngine(
     }
 
     fun stop() {
+        if (!isRunning) return
+        isRunning = false
         for (transport in transports) {
             try { transport.stop() } catch (_: Exception) {}
         }

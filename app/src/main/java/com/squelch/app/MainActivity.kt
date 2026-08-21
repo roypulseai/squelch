@@ -17,6 +17,7 @@ import com.squelch.app.data.remote.DriveBackupManager
 import com.squelch.app.data.remote.FirestoreVaultManager
 import com.squelch.app.data.repository.VaultRepository
 import com.squelch.app.messaging.MessageRelayHolder
+import com.squelch.app.mesh.engine.MeshEngineManager
 import com.squelch.app.mesh.relay.MessageRelay
 import com.squelch.app.ui.navigation.AppEntry
 import com.squelch.app.ui.theme.SquelchTheme
@@ -37,6 +38,7 @@ class MainActivity : FragmentActivity() {
     @Inject lateinit var driveBackupManager: DriveBackupManager
     @Inject lateinit var firestoreVaultManager: FirestoreVaultManager
     @Inject lateinit var messageRelay: MessageRelay
+    @Inject lateinit var meshEngineManager: MeshEngineManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -65,7 +67,8 @@ class MainActivity : FragmentActivity() {
                             vaultRepository = vaultRepository,
                             driveBackupManager = driveBackupManager,
                             firestoreVaultManager = firestoreVaultManager,
-                            messageRelay = messageRelay
+                            messageRelay = messageRelay,
+                            meshEngineManager = meshEngineManager
                         )
                     }
                 }

@@ -20,6 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Lock
@@ -57,6 +58,7 @@ fun SettingsScreen(
     email: String = "",
     onNavigateToProfile: () -> Unit = {},
     onNavigateToBlockedUsers: () -> Unit = {},
+    onNavigateToPermissions: () -> Unit = {},
     onSignOut: () -> Unit = {},
     onLock: () -> Unit = {},
     onEnableBiometric: () -> Unit = {},
@@ -125,6 +127,12 @@ fun SettingsScreen(
                 title = "Blocked Users",
                 subtitle = "Manage blocked contacts",
                 onClick = onNavigateToBlockedUsers
+            )
+            SettingsItem(
+                icon = Icons.Default.Shield,
+                title = "Permissions",
+                subtitle = "Manage app permissions",
+                onClick = onNavigateToPermissions
             )
 
             Spacer(modifier = Modifier.height(8.dp))

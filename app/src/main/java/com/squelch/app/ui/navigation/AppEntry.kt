@@ -43,6 +43,7 @@ import com.squelch.app.data.remote.FirestoreVaultManager
 import com.squelch.app.data.repository.VaultRepository
 import com.squelch.app.data.repository.VaultRepository.VaultState
 import com.squelch.app.messaging.MessageForegroundService
+import com.squelch.app.mesh.engine.MeshEngineManager
 import com.squelch.app.mesh.relay.MessageRelay
 import com.squelch.app.qr.QrContact
 import com.squelch.app.ui.screens.chats.ChatsScreen
@@ -61,6 +62,7 @@ import com.squelch.app.ui.screens.mesh.RadarScreen
 import com.squelch.app.ui.screens.mesh.RadarViewModel
 import com.squelch.app.ui.screens.onboarding.BiometricGateScreen
 import com.squelch.app.ui.screens.onboarding.PermissionsScreen
+import com.squelch.app.ui.screens.onboarding.hasPermissionsAsked
 import com.squelch.app.ui.screens.onboarding.RestoreScreen
 import com.squelch.app.ui.screens.onboarding.SignInScreen
 import com.squelch.app.ui.screens.settings.SettingsScreen
@@ -86,7 +88,8 @@ fun AppEntry(
     vaultRepository: VaultRepository,
     driveBackupManager: DriveBackupManager,
     firestoreVaultManager: FirestoreVaultManager,
-    messageRelay: MessageRelay
+    messageRelay: MessageRelay,
+    meshEngineManager: MeshEngineManager
 ) {
     val navController = rememberNavController()
     val authState by authRepository.state.collectAsState()
@@ -117,7 +120,10 @@ fun AppEntry(
 
     val startDestination = when {
         !isSignedIn -> Screen.SignIn.route
-        vaultState is VaultState.Unlocked -> Screen.Chats.route
+        vaultState is VaultState.Unlocked -> {
+            if (!hasPermissionsAsked(activity)) Screen.Permissions.route
+            else Screen.Chats.route
+        }
         vaultState is VaultState.BiometricRequired -> Screen.Unlock.route
         vaultState is VaultState.Error -> Screen.Unlock.route
         else -> Screen.SignIn.route
@@ -163,6 +169,7 @@ fun AppEntry(
                     if (!messageRelay.isRunning) {
                         messageRelay.start(edPubHex, db, identity, signed.email)
                     }
+                    meshEngineManager.getOrCreate()
                     if (!MessageForegroundService.isRunning) {
                         android.content.Intent(activity, MessageForegroundService::class.java)
                             .putExtra("edPubHex", edPubHex)
@@ -170,13 +177,17 @@ fun AppEntry(
                     }
                 }
                 val current = navController.currentDestination?.route
-                if (current == Screen.SignIn.route || current == Screen.Unlock.route) {
+                if (current == Screen.SignIn.route || current == Screen.Unlock.route || current == Screen.Permissions.route) {
                     if (showRestore) {
                         navController.navigate(Screen.Restore.route) {
                             popUpTo(0) { inclusive = true }
                         }
-                    } else {
+                    } else if (!hasPermissionsAsked(activity)) {
                         navController.navigate(Screen.Permissions.route) {
+                            popUpTo(0) { inclusive = true }
+                        }
+                    } else {
+                        navController.navigate(Screen.Chats.route) {
                             popUpTo(0) { inclusive = true }
                         }
                     }
@@ -194,6 +205,7 @@ fun AppEntry(
                 if (messageRelay.isRunning) {
                     messageRelay.stop()
                 }
+                meshEngineManager.stop()
                 if (MessageForegroundService.isRunning) {
                     MessageForegroundService.stop(activity)
                 }
@@ -310,13 +322,17 @@ fun AppEntry(
                 composable(Screen.Permissions.route) {
                     PermissionsScreen(
                         onAllGranted = {
-                            navController.navigate(Screen.Chats.route) {
-                                popUpTo(Screen.Permissions.route) { inclusive = true }
+                            if (!navController.popBackStack()) {
+                                navController.navigate(Screen.Chats.route) {
+                                    popUpTo(Screen.Permissions.route) { inclusive = true }
+                                }
                             }
                         },
                         onSkip = {
-                            navController.navigate(Screen.Chats.route) {
-                                popUpTo(Screen.Permissions.route) { inclusive = true }
+                            if (!navController.popBackStack()) {
+                                navController.navigate(Screen.Chats.route) {
+                                    popUpTo(Screen.Permissions.route) { inclusive = true }
+                                }
                             }
                         }
                     )
@@ -618,6 +634,7 @@ fun AppEntry(
                         email = signed?.email ?: "",
                         onNavigateToProfile = { navController.navigate(Screen.Profile.route) },
                         onNavigateToBlockedUsers = { navController.navigate(Screen.BlockedUsers.route) },
+                        onNavigateToPermissions = { navController.navigate(Screen.Permissions.route) },
                         onSignOut = {
                             vaultRepository.signOut()
                             authRepository.signOut()

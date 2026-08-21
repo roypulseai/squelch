@@ -13,6 +13,7 @@ import com.squelch.app.crypto.Identity
 import com.squelch.app.data.local.entity.ContactEntity
 import com.squelch.app.data.repository.VaultRepository
 import com.squelch.app.mesh.engine.MeshEngine
+import com.squelch.app.mesh.engine.MeshEngineManager
 import com.squelch.app.mesh.transport.WifiDirectManager
 import com.squelch.app.util.toHex
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -33,12 +34,14 @@ class RadarViewModel @Inject constructor(
     application: Application,
     private val authRepository: AuthRepository,
     private val vaultRepository: VaultRepository,
-    private val meshEngine: MeshEngine?
+    private val meshEngineManager: MeshEngineManager
 ) : AndroidViewModel(application) {
 
     companion object {
         private const val TAG = "RadarViewModel"
     }
+
+    private val meshEngine: MeshEngine? get() = meshEngineManager.get()
 
     data class TransportStatus(
         val name: String,
@@ -107,6 +110,7 @@ class RadarViewModel @Inject constructor(
     init {
         startTime = System.currentTimeMillis()
         initSelfPubkey()
+        meshEngineManager.getOrCreate()
         wifiDirectManager.start()
 
         observePeerChanges()
@@ -359,5 +363,4 @@ class RadarViewModel @Inject constructor(
     override fun onCleared() {
         super.onCleared()
         wifiDirectManager.stop()
-    }
-}
+    }}
