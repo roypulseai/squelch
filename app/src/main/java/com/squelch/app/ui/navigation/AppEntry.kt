@@ -438,7 +438,27 @@ fun AppEntry(
                         contacts = contacts,
                         onNavigateToAddContact = { navController.navigate(Screen.AddContact.route) },
                         onNavigateToMyQr = { navController.navigate(Screen.MyQr.route) },
-                        onNavigateToUserSearch = { navController.navigate(Screen.UserSearch.route) }
+                        onNavigateToUserSearch = { navController.navigate(Screen.UserSearch.route) },
+                        onContactClick = { contact ->
+                            val convId = contact.pubkey
+                            val convName = contact.callsign.ifEmpty { contact.displayName }
+                            MainScope().launch {
+                                withContext(Dispatchers.IO) {
+                                    val db = vaultRepository.db ?: return@withContext
+                                    val existing = db.conversations().get(convId)
+                                    if (existing == null) {
+                                        db.conversations().upsert(
+                                            com.squelch.app.data.local.entity.ConversationEntity(
+                                                id = convId,
+                                                name = convName,
+                                                lastMessageTimestamp = System.currentTimeMillis()
+                                            )
+                                        )
+                                    }
+                                }
+                            }
+                            navController.navigate(Screen.Conversation.createRoute(convId, convName, false))
+                        }
                     )
                 }
 
@@ -460,6 +480,9 @@ fun AppEntry(
                                 }
                             }
                             navController.popBackStack()
+                        },
+                        onFindByEmail = {
+                            navController.navigate(Screen.UserSearch.route)
                         }
                     )
                 }
