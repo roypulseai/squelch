@@ -1,12 +1,10 @@
 package com.squelch.app.mesh.relay
 
 import android.util.Log
-import com.squelch.app.crypto.E2ECrypto
 import com.squelch.app.crypto.Identity
 import com.squelch.app.data.local.SquelchDatabase
 import com.squelch.app.data.local.entity.ConversationEntity
 import com.squelch.app.data.local.entity.MessageEntity
-import com.squelch.app.messaging.FcmTokenManager
 import com.squelch.app.messaging.MessageRelayHolder
 import com.squelch.app.mesh.transport.FirestoreTransport
 import com.squelch.app.util.toHex
@@ -99,8 +97,7 @@ class MessageRelay @Inject constructor() {
         recipientEdPubHex: String,
         recipientUid: String,
         senderName: String,
-        plaintext: String,
-        db: SquelchDatabase
+        plaintext: String
     ) {
         val t = transport ?: run {
             Log.e(TAG, "Transport not running, cannot send")
@@ -108,37 +105,6 @@ class MessageRelay @Inject constructor() {
         }
 
         scope?.launch {
-            val msg = MessageEntity(
-                conversationId = recipientEdPubHex,
-                msgId = UUID.randomUUID().toString(),
-                sender = selfEdPubHex,
-                body = plaintext,
-                timestamp = System.currentTimeMillis(),
-                direction = 1,
-                delivery = 0,
-                kind = 2
-            )
-            db.messages().insert(msg)
-
-            val existingConv = db.conversations().get(recipientEdPubHex)
-            if (existingConv == null) {
-                db.conversations().upsert(
-                    ConversationEntity(
-                        id = recipientEdPubHex,
-                        name = senderName,
-                        lastMessagePreview = plaintext.take(80),
-                        lastMessageTimestamp = msg.timestamp,
-                        unreadCount = 0
-                    )
-                )
-            } else {
-                db.conversations().updateLastMessage(
-                    id = recipientEdPubHex,
-                    preview = plaintext.take(80),
-                    timestamp = msg.timestamp
-                )
-            }
-
             t.sendWithMeta(
                 recipientEdPubHex = recipientEdPubHex,
                 recipientUid = recipientUid,

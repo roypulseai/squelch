@@ -129,8 +129,7 @@ class ChatViewModel @Inject constructor(
                     recipientEdPubHex = conversationId,
                     recipientUid = recipientUid,
                     senderName = senderName,
-                    plaintext = plaintext,
-                    db = database
+                    plaintext = plaintext
                 )
             } else {
                 Log.w("ChatViewModel", "MessageRelay not running, stored locally only")
@@ -176,8 +175,7 @@ class ChatViewModel @Inject constructor(
                             recipientEdPubHex = member.edPubHex,
                             recipientUid = firebaseUid,
                             senderName = groupName,
-                            plaintext = "[${groupName}] ${messageRelay.getContactName(database)}: $plaintext",
-                            db = database
+                            plaintext = "[${groupName}] ${messageRelay.getContactName(database)}: $plaintext"
                         )
                     } catch (e: Exception) {
                         Log.e("ChatViewModel", "Failed to send to ${member.edPubHex}: ${e.message}")

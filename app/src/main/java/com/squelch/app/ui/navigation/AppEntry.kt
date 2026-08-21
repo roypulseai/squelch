@@ -423,11 +423,23 @@ fun AppEntry(
                         uid
                     }
 
+                    val recipientEmail = remember(conversationId) {
+                        var email = ""
+                        kotlinx.coroutines.runBlocking {
+                            try {
+                                val contact = vaultRepository.db?.contacts()?.get(conversationId)
+                                email = contact?.displayName ?: ""
+                            } catch (_: Exception) {}
+                        }
+                        email
+                    }
+
                     ConversationScreen(
                         conversationId = conversationId,
                         conversationName = conversationName,
                         selfPubkey = selfPubkey,
                         recipientUid = recipientUid,
+                        recipientEmail = recipientEmail,
                         isGroup = isGroup,
                         onBack = { navController.popBackStack() }
                     )

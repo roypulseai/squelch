@@ -23,7 +23,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.SignalWifi4Bar
+import androidx.compose.foundation.clickable
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -70,6 +73,7 @@ fun ConversationScreen(
     conversationName: String,
     selfPubkey: String,
     recipientUid: String = "",
+    recipientEmail: String = "",
     networkType: String = "Internet",
     isGroup: Boolean = false,
     onBack: () -> Unit = {},
@@ -78,6 +82,8 @@ fun ConversationScreen(
     val messages by viewModel.messages(conversationId).collectAsState()
     var inputText by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
+    var showUserInfo by remember { mutableStateOf(false) }
+    val userInfoSheetState = rememberModalBottomSheetState()
 
     LaunchedEffect(messages.size) {
         if (messages.isNotEmpty()) {
@@ -93,7 +99,13 @@ fun ConversationScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.clickable(
+                            enabled = !isGroup,
+                            onClick = { showUserInfo = true }
+                        )
+                    ) {
                         Box(
                             modifier = Modifier
                                 .size(40.dp)
@@ -277,6 +289,82 @@ fun ConversationScreen(
                 }
             }
         }
+    }
+
+    if (showUserInfo && !isGroup) {
+        ModalBottomSheet(
+            onDismissRequest = { showUserInfo = false },
+            sheetState = userInfoSheetState
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(64.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = conversationName.firstOrNull()?.uppercase() ?: "?",
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        style = MaterialTheme.typography.headlineMedium
+                    )
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = conversationName,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        if (conversationId.isNotEmpty()) {
+                            InfoRow(label = "User ID", value = conversationId)
+                            Spacer(modifier = Modifier.height(10.dp))
+                        }
+                        if (recipientUid.isNotEmpty()) {
+                            InfoRow(label = "Firebase UID", value = recipientUid)
+                            Spacer(modifier = Modifier.height(10.dp))
+                        }
+                        if (recipientEmail.isNotEmpty() && recipientEmail != conversationName) {
+                            InfoRow(label = "Display Name", value = recipientEmail)
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(24.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun InfoRow(label: String, value: String) {
+    Column {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontWeight = FontWeight.SemiBold
+        )
+        Spacer(modifier = Modifier.height(2.dp))
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
 

@@ -1,8 +1,9 @@
 package com.squelch.app.ui.screens.chats
 
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,12 +20,14 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.VolumeOff
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
@@ -33,20 +36,17 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
-import androidx.compose.material3.SwipeToDismissBox
-import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -58,12 +58,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.squelch.app.data.local.entity.ConversationEntity
-import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun ChatsScreen(
     onNavigateToConversation: (id: String, name: String) -> Unit = { _, _ -> },
@@ -76,11 +75,44 @@ fun ChatsScreen(
     val conversations by viewModel.conversations.collectAsState()
     var searchQuery by remember { mutableStateOf("") }
     var isSearchActive by remember { mutableStateOf(false) }
+    var showDeleteDialog by remember { mutableStateOf<ConversationEntity?>(null) }
 
     val filteredConversations = if (searchQuery.isBlank()) conversations
     else conversations.filter {
         it.name.contains(searchQuery, ignoreCase = true) ||
                 it.lastMessagePreview.contains(searchQuery, ignoreCase = true)
+    }
+
+    showDeleteDialog?.let { conv ->
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = null },
+            icon = {
+                Icon(
+                    Icons.Default.Delete,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error
+                )
+            },
+            title = { Text("Delete conversation?") },
+            text = {
+                Text("Delete all messages with ${conv.name}? This cannot be undone.")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onDeleteConversation(conv.id)
+                        showDeleteDialog = null
+                    }
+                ) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = null }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 
     Scaffold(
@@ -230,39 +262,11 @@ fun ChatsScreen(
                     .padding(paddingValues)
             ) {
                 items(sorted, key = { it.id }) { conv ->
-                    val dismissState = rememberSwipeToDismissBoxState(
-                        confirmValueChange = {
-                            if (it == SwipeToDismissBoxValue.EndToStart) {
-                                onDeleteConversation(conv.id)
-                                true
-                            } else false
-                        }
+                    ConversationItem(
+                        conversation = conv,
+                        onClick = { onNavigateToConversation(conv.id, conv.name) },
+                        onLongClick = { showDeleteDialog = conv }
                     )
-
-                    SwipeToDismissBox(
-                        state = dismissState,
-                        backgroundContent = {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .background(MaterialTheme.colorScheme.error)
-                                    .padding(horizontal = 20.dp),
-                                contentAlignment = Alignment.CenterEnd
-                            ) {
-                                Icon(
-                                    Icons.Default.Delete,
-                                    contentDescription = "Delete",
-                                    tint = Color.White
-                                )
-                            }
-                        },
-                        enableDismissFromStartToEnd = false
-                    ) {
-                        ConversationItem(
-                            conversation = conv,
-                            onClick = { onNavigateToConversation(conv.id, conv.name) }
-                        )
-                    }
 
                     if (sorted.indexOf(conv) < sorted.lastIndex) {
                         HorizontalDivider(
@@ -276,17 +280,22 @@ fun ChatsScreen(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ConversationItem(
     conversation: ConversationEntity,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onLongClick: () -> Unit = {}
 ) {
     val hasUnread = conversation.unreadCount > 0
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            )
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
