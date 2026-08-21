@@ -226,12 +226,13 @@ class MessageRelay @Inject constructor(
                 val contact = db.contacts().get(senderEdPubHex)
                 val recipientUid = contact?.firebaseUid ?: ""
                 if (recipientUid.isNotEmpty()) {
+                    val cmd = JSONObject().apply { put("cmd", "blocked") }
                     sendCommand(
                         recipientEdPubHex = senderEdPubHex,
                         recipientUid = recipientUid,
                         senderName = "",
                         kind = Transport.TransportFrame.KIND_BLOCKED,
-                        payloadBytes = "blocked".toByteArray(Charsets.UTF_8)
+                        payloadBytes = cmd.toString().toByteArray(Charsets.UTF_8)
                     )
                 }
             } catch (_: Exception) {}
