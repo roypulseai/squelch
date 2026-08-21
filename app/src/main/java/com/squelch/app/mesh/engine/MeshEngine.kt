@@ -36,6 +36,7 @@ class MeshEngine(
     private val rng = SecureRandom()
     @Volatile private var isRunning = false
     val running: Boolean get() = isRunning
+    val selfPubHex: String get() = identity.edPub.toHex()
 
     private val _peers = MutableStateFlow<Set<String>>(emptySet())
     val peers: StateFlow<Set<String>> = _peers.asStateFlow()

@@ -11,6 +11,7 @@ import com.squelch.app.data.local.entity.GroupEntity
 import com.squelch.app.data.local.entity.GroupMemberEntity
 import com.squelch.app.data.local.entity.MessageEntity
 import com.squelch.app.data.repository.VaultRepository
+import com.squelch.app.mesh.engine.MeshEngineManager
 import com.squelch.app.mesh.relay.MessageRelay
 import com.squelch.app.mesh.transport.Transport
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -29,7 +30,8 @@ import javax.inject.Inject
 @HiltViewModel
 class ChatViewModel @Inject constructor(
     private val vaultRepository: VaultRepository,
-    private val messageRelay: MessageRelay
+    private val messageRelay: MessageRelay,
+    private val meshEngineManager: MeshEngineManager
 ) : ViewModel() {
 
     companion object {
@@ -198,6 +200,15 @@ class ChatViewModel @Inject constructor(
                 )
             } else {
                 Log.w("ChatViewModel", "MessageRelay not running, stored locally only")
+            }
+
+            try {
+                meshEngineManager.get()?.sendMessage(
+                    recipientEdPubHex = conversationId,
+                    plaintext = plaintext.toByteArray(Charsets.UTF_8)
+                )
+            } catch (e: Exception) {
+                Log.d("ChatViewModel", "Mesh send failed (non-critical): ${e.message}")
             }
         }
     }

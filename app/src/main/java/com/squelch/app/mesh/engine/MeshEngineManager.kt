@@ -4,18 +4,30 @@ import android.content.Context
 import android.util.Log
 import com.squelch.app.auth.AuthRepository
 import com.squelch.app.crypto.Identity
+import com.squelch.app.data.local.SquelchDatabase
+import com.squelch.app.data.local.entity.ConversationEntity
+import com.squelch.app.data.local.entity.MessageEntity
+import com.squelch.app.data.repository.VaultRepository
 import com.squelch.app.mesh.transport.BleTransport
-import com.squelch.app.mesh.transport.FirestoreTransport
 import com.squelch.app.mesh.transport.Transport
 import com.squelch.app.mesh.transport.WifiDirectTransport
+import com.squelch.app.util.Notifications
 import com.squelch.app.util.toHex
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class MeshEngineManager @Inject constructor(
-    @dagger.hilt.android.qualifiers.ApplicationContext private val context: Context,
-    private val authRepository: AuthRepository
+    @ApplicationContext private val context: Context,
+    private val authRepository: AuthRepository,
+    private val vaultRepository: VaultRepository
 ) {
     companion object {
         private const val TAG = "MeshEngineManager"
@@ -23,6 +35,7 @@ class MeshEngineManager @Inject constructor(
 
     @Volatile
     private var engine: MeshEngine? = null
+    private var scope: CoroutineScope? = null
 
     @Synchronized
     fun getOrCreate(): MeshEngine? {
@@ -39,6 +52,11 @@ class MeshEngineManager @Inject constructor(
             val eng = MeshEngine(identity = identity, transports = transports)
             eng.start()
             engine = eng
+
+            val s = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+            scope = s
+            s.launch { collectMeshMessages(eng) }
+
             Log.d(TAG, "MeshEngine created and started")
             eng
         } catch (e: Exception) {
@@ -49,8 +67,71 @@ class MeshEngineManager @Inject constructor(
 
     fun get(): MeshEngine? = engine
 
+    private suspend fun collectMeshMessages(eng: MeshEngine) {
+        eng.messages.collect { incoming ->
+            try {
+                val db = vaultRepository.db ?: return@collect
+                if (incoming.senderEdPubHex == eng.selfPubHex) return@collect
+
+                val plaintext = String(incoming.plaintext, Charsets.UTF_8)
+                val contact = db.contacts().get(incoming.senderEdPubHex)
+                val senderName = contact?.displayName?.ifEmpty { null }
+                    ?: contact?.callsign?.ifEmpty { null }
+                    ?: incoming.senderEdPubHex.take(8)
+                val conversationId = incoming.senderEdPubHex
+
+                val msgId = UUID.randomUUID().toString()
+                val message = MessageEntity(
+                    conversationId = conversationId,
+                    msgId = msgId,
+                    sender = incoming.senderEdPubHex,
+                    body = plaintext,
+                    timestamp = incoming.timestamp,
+                    direction = 0,
+                    delivery = 1,
+                    kind = 2
+                )
+                db.messages().insert(message)
+
+                val existingConv = db.conversations().get(conversationId)
+                if (existingConv == null) {
+                    db.conversations().upsert(
+                        ConversationEntity(
+                            id = conversationId,
+                            name = senderName,
+                            lastMessagePreview = plaintext.take(80),
+                            lastMessageTimestamp = incoming.timestamp,
+                            unreadCount = 1
+                        )
+                    )
+                } else {
+                    db.conversations().updateLastMessage(
+                        id = conversationId,
+                        preview = plaintext.take(80),
+                        timestamp = incoming.timestamp
+                    )
+                    db.conversations().incrementUnread(conversationId)
+                }
+
+                Notifications.showMessageNotification(
+                    context = context,
+                    notificationId = conversationId.hashCode(),
+                    title = senderName,
+                    body = plaintext.take(100),
+                    conversationId = conversationId
+                )
+
+                Log.d(TAG, "Mesh message from $senderName: ${plaintext.take(50)}")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to handle mesh message: ${e.message}")
+            }
+        }
+    }
+
     @Synchronized
     fun stop() {
+        scope?.cancel()
+        scope = null
         engine?.stop()
         engine = null
         Log.d(TAG, "MeshEngine stopped")

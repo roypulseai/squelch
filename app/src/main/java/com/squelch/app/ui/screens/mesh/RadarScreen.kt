@@ -196,7 +196,14 @@ fun RadarScreen(
                 }
             } else {
                 items(peers, key = { it.id }) { peer ->
-                    PeerCard(peer = peer, onTap = { onPeerTap(peer.id, peer.name) })
+                    PeerCard(
+                        peer = peer,
+                        onTap = {
+                            if (peer.isSquelchUser || peer.isContact) {
+                                onPeerTap(peer.id, peer.name)
+                            }
+                        }
+                    )
                 }
             }
 
@@ -679,10 +686,11 @@ private fun TransportCard(
 
 @Composable
 private fun PeerCard(peer: RadarViewModel.PeerInfo, onTap: () -> Unit = {}) {
+    val canChat = peer.isSquelchUser || peer.isContact
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onTap() },
+            .then(if (canChat) Modifier.clickable { onTap() } else Modifier),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
         )
@@ -732,6 +740,22 @@ private fun PeerCard(peer: RadarViewModel.PeerInfo, onTap: () -> Unit = {}) {
                         ) {
                             Text(
                                 text = "CONTACT",
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = RadarGreen,
+                                fontSize = 8.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                    if (peer.isSquelchUser) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = RadarGreen.copy(alpha = 0.15f)
+                        ) {
+                            Text(
+                                text = "SQUELCH",
                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = RadarGreen,

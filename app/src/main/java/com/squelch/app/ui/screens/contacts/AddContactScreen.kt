@@ -139,7 +139,7 @@ fun AddContactScreen(
                                     .setDesiredBarcodeFormats(ScanOptions.QR_CODE)
                                     .setPrompt("Scan Squelch QR")
                                     .setBeepEnabled(true)
-                                    .setOrientationLocked(true)
+                                    .setOrientationLocked(false)
                                 scanLauncher.launch(options)
                             },
                             modifier = Modifier

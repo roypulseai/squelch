@@ -68,6 +68,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextRange
@@ -229,7 +230,6 @@ fun ConversationScreen(
                 .padding(paddingValues)
                 .background(MaterialTheme.colorScheme.background)
                 .imePadding()
-                .navigationBarsPadding()
         ) {
             LazyColumn(
                 modifier = Modifier
@@ -482,8 +482,7 @@ fun ConversationScreen(
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         if (recipientEmail.isNotEmpty()) {
-                            val emailUsername = recipientEmail.substringBefore("@")
-                            InfoRow(label = "User", value = emailUsername)
+                            InfoRow(label = "Email", value = recipientEmail)
                         }
                     }
                 }
@@ -920,20 +919,13 @@ private fun MessageBubble(
 private fun DeliveryTick(delivery: Int) {
     val tickColor = when (delivery) {
         2 -> Accent
-        else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
+        else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
     }
-    val tickText = when (delivery) {
-        0 -> "\u2713"
-        1 -> "\u2713\u2713"
-        2 -> "\u2713\u2713"
-        else -> ""
+    when (delivery) {
+        0 -> Text("\u2713", style = MaterialTheme.typography.labelSmall, color = tickColor, fontSize = 13.sp)
+        1 -> Text("\u2713\u2713", style = MaterialTheme.typography.labelSmall, color = tickColor, fontSize = 12.sp)
+        2 -> Text("\u2713\u2713", style = MaterialTheme.typography.labelSmall, color = tickColor, fontSize = 12.sp)
     }
-    Text(
-        text = tickText,
-        style = MaterialTheme.typography.labelSmall,
-        color = tickColor,
-        fontSize = 11.sp
-    )
 }
 
 @Composable

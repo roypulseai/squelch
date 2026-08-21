@@ -58,7 +58,9 @@ class RadarViewModel @Inject constructor(
         val transport: String,
         val signalStrength: Int,
         val lastSeen: Long,
-        val isContact: Boolean
+        val isContact: Boolean,
+        val isSquelchUser: Boolean = false,
+        val email: String = ""
     )
 
     data class SquelchUser(
@@ -201,6 +203,9 @@ class RadarViewModel @Inject constructor(
             }
         } catch (_: Exception) { emptySet() }
 
+        val squelchUserMap = _squelchUsers.value.associateBy { it.edPub }
+        val squelchContactMap = _squelchUsers.value.associateBy { it.uid }
+
         val peerList = mutableListOf<PeerInfo>()
         val seen = mutableSetOf<String>()
 
@@ -208,14 +213,22 @@ class RadarViewModel @Inject constructor(
             for (pubkey in blePeers) {
                 if (pubkey == _selfPubkey.value) continue
                 if (!seen.add(pubkey)) continue
+                val squelchUser = squelchUserMap[pubkey]
+                val contact = if (squelchUser != null) {
+                    squelchUser.uid in squelchContactMap && squelchUser.isContact
+                } else {
+                    pubkey in contactPubkeys
+                }
                 peerList.add(
                     PeerInfo(
                         id = pubkey,
-                        name = pubkey.take(8),
+                        name = squelchUser?.displayName ?: pubkey.take(8),
                         transport = "BLE",
                         signalStrength = 75,
                         lastSeen = System.currentTimeMillis(),
-                        isContact = pubkey in contactPubkeys
+                        isContact = pubkey in contactPubkeys || (squelchUser?.isContact == true),
+                        isSquelchUser = squelchUser != null,
+                        email = squelchUser?.email ?: ""
                     )
                 )
             }
@@ -231,7 +244,8 @@ class RadarViewModel @Inject constructor(
                         transport = "Wi-Fi Direct",
                         signalStrength = if (peer.status == "Connected") 95 else 50,
                         lastSeen = System.currentTimeMillis(),
-                        isContact = false
+                        isContact = false,
+                        isSquelchUser = false
                     )
                 )
             }
