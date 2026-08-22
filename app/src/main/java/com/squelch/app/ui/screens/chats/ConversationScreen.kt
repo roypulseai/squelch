@@ -995,12 +995,10 @@ private fun MessageBubble(
                 }
                 if (result.translated != null && result.translated != msg.body) {
                     displayText = result.translated
-                } else {
-                    displayText = msg.body
                 }
                 hasTranslated = true
             } catch (e: Exception) {
-                displayText = msg.body
+                android.util.Log.e("MessageBubble", "Translation crashed: ${e.message}")
                 translationFailed = true
             } finally {
                 isTranslating = false
