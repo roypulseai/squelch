@@ -39,8 +39,10 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.automirrored.filled.Forward
+import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.SignalWifi4Bar
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -116,9 +118,11 @@ fun ConversationScreen(
     var showUserInfo by remember { mutableStateOf(false) }
     val userInfoSheetState = rememberModalBottomSheetState()
     var isRecipientBlocked by remember { mutableStateOf(false) }
+    var isRecipientContact by remember { mutableStateOf(false) }
 
     LaunchedEffect(conversationId) {
         isRecipientBlocked = viewModel.isBlocked(conversationId)
+        isRecipientContact = viewModel.isContact(conversationId)
     }
 
     var showActionsFor by remember { mutableStateOf<MessageEntity?>(null) }
@@ -488,6 +492,29 @@ fun ConversationScreen(
                     }
                 }
                 Spacer(modifier = Modifier.height(24.dp))
+
+                if (!isRecipientContact && !isGroup) {
+                    Button(
+                        onClick = {
+                            viewModel.addContact(
+                                pubkey = conversationId,
+                                displayName = conversationName,
+                                email = recipientEmail,
+                                firebaseUid = recipientUid,
+                                xPub = ""
+                            )
+                            isRecipientContact = true
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = Accent)
+                    ) {
+                        Icon(Icons.Default.PersonAdd, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Add to Contacts")
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+
                 if (isRecipientBlocked) {
                     OutlinedButton(
                         onClick = {

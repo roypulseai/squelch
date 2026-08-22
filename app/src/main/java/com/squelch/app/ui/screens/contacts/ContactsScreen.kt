@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.PersonOutline
 import androidx.compose.material.icons.filled.QrCode
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
@@ -67,7 +68,8 @@ fun ContactsScreen(
     onNavigateToMyQr: () -> Unit = {},
     onNavigateToUserSearch: () -> Unit = {},
     onContactClick: (ContactEntity) -> Unit = {},
-    onDeleteContact: (String) -> Unit = {}
+    onDeleteContact: (String) -> Unit = {},
+    onSyncContacts: () -> Unit = {}
 ) {
     var searchQuery by remember { mutableStateOf("") }
     var isSearchActive by remember { mutableStateOf(false) }
@@ -165,6 +167,9 @@ fun ContactsScreen(
                     actions = {
                         IconButton(onClick = { isSearchActive = true }) {
                             Icon(Icons.Default.Search, contentDescription = "Search", tint = MaterialTheme.colorScheme.onSurface)
+                        }
+                        IconButton(onClick = onSyncContacts) {
+                            Icon(Icons.Default.Sync, contentDescription = "Sync contacts", tint = MaterialTheme.colorScheme.onSurface)
                         }
                         IconButton(onClick = onNavigateToMyQr) {
                             Icon(Icons.Default.QrCode, contentDescription = "My QR", tint = MaterialTheme.colorScheme.onSurface)

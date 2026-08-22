@@ -296,6 +296,16 @@ class ChatViewModel @Inject constructor(
                     )
                 )
             }
+
+            database.conversations().upsert(
+                ConversationEntity(
+                    id = groupId,
+                    name = name,
+                    lastMessagePreview = "Group created",
+                    lastMessageTimestamp = System.currentTimeMillis(),
+                    type = 1
+                )
+            )
         }
     }
 
@@ -385,7 +395,46 @@ class ChatViewModel @Inject constructor(
 
     fun getMemberName(pubkey: String): String {
         if (pubkey == messageRelay.selfEdPubHex) return "You"
-        return pubkey.take(8)
+        val db = vaultRepository.db ?: return pubkey.take(8)
+        return try {
+            kotlinx.coroutines.runBlocking {
+                val contact = db.contacts().get(pubkey)
+                contact?.displayName?.ifEmpty { contact.callsign.ifEmpty { pubkey.take(8) } }
+                    ?: pubkey.take(8)
+            }
+        } catch (_: Exception) { pubkey.take(8) }
+    }
+
+    fun isContact(pubkey: String): Boolean {
+        val db = vaultRepository.db ?: return false
+        return try {
+            kotlinx.coroutines.runBlocking { db.contacts().get(pubkey) != null }
+        } catch (_: Exception) { false }
+    }
+
+    fun addContact(pubkey: String, displayName: String, email: String, firebaseUid: String, xPub: String) {
+        viewModelScope.launch {
+            val db = vaultRepository.db ?: return@launch
+            db.contacts().upsert(
+                ContactEntity(
+                    pubkey = pubkey,
+                    firebaseUid = firebaseUid,
+                    xPub = xPub,
+                    callsign = displayName,
+                    displayName = displayName,
+                    email = email,
+                    lastSeen = System.currentTimeMillis()
+                )
+            )
+            vaultRepository.pushContactsToCloud()
+        }
+    }
+
+    fun syncAllContacts() {
+        viewModelScope.launch {
+            vaultRepository.pushContactsToCloud()
+            vaultRepository.syncContactsFromCloud()
+        }
     }
 
     fun getSelfPubkey(): String = messageRelay.selfEdPubHex

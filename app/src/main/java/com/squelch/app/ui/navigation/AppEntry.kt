@@ -573,6 +573,9 @@ fun AppEntry(
                         },
                         onDeleteContact = { pubkey ->
                             contactsChatViewModel.deleteContact(pubkey)
+                        },
+                        onSyncContacts = {
+                            contactsChatViewModel.syncAllContacts()
                         }
                     )
                 }
