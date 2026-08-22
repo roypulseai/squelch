@@ -75,6 +75,14 @@ SignIn -> Permissions -> [Restore?] -> Chats (main)
   - TTL cleanup: deletes Firestore docs older than 24h
   - Shows notifications on incoming messages
 
+#### Translation (`translate/`)
+- `TranslationManager` — On-device ML Kit translation
+  - Language detection + translation via Google ML Kit (offline)
+  - Supports 30+ languages
+  - Per-message translation with caching
+  - Toggle in conversation top bar + language selector in Settings
+  - Original text shown below translation when available
+
 #### Messaging Services (`messaging/`)
 - `SquelchMessagingService` — FCM push receiver
 - `MessageForegroundService` — Sticky foreground service, 30-sec Firestore poll
@@ -218,11 +226,10 @@ Studied `permissionlesstech/bitchat-android` for BLE mesh design. Key takeaways:
 
 | Commit | Description |
 |--------|-------------|
+| `1dfb6d8` | Rewrite BLE transport: GATT write queue, fragmentation, connection limits, self-healing, store-and-forward |
+| `ee52a72` | Add in-chat translation with ML Kit (WeChat-style toggle, language selector, on-device) |
+| `6aaab91` | Add to Contact from stranger chat, contact sync button, group creates conversation, fix getMemberName |
 | `eb031f1` | Polish Chats/Contacts UI, add pin/mute/delete, backup descriptions |
-| `67de44a` | Fix keyboard gap, delivery acks, email lookup for QR contacts |
-| `5e957d0` | Fix contact sync: better logging, remove FieldValue.delete |
-| `476ba7c` | Bump version to 1.1.0, show version in Settings |
-| `ad51cca` | Fix keyboard gap, ticks, QR orientation, email in contact, mesh networking |
 | `e21809d` | Fix crash on sign-in: vault decompression fallback, destructive migration |
 | `ad8d570` | Fix app freeze: remove runBlocking, Thread.sleep, fix peer observation |
 | `bc5a920` | Fix block notification in handleIncoming to use JSON cmd format |
@@ -233,39 +240,27 @@ Studied `permissionlesstech/bitchat-android` for BLE mesh design. Key takeaways:
 
 ## Known Issues
 
-1. **BLE mesh:** Peers are discovered but message delivery is unreliable — GATT write queue not implemented properly
+1. **BLE mesh:** Store-and-forward is single-hop only — needs multi-hop TTL relay for full mesh
 2. **WiFi Direct:** Socket connection needs real-device testing (BlueStacks doesn't support WiFi Direct)
 3. **No multi-hop relay:** Messages only reach directly connected peers
-4. **No fragmentation:** Large messages may fail over BLE (MTU limit ~180 bytes)
-5. **MainScope() leaks:** Several places use MainScope().launch instead of rememberCoroutineScope
-6. **No offline message queue:** Messages sent while offline are lost
-7. **Vault security:** Key derived from non-secret googleUid (known limitation, acceptable for v1)
+4. **MainScope() leaks:** Several places use MainScope().launch instead of rememberCoroutineScope
+5. **No offline message queue:** Messages sent while offline are lost (store-and-forward caches on BLE only)
+6. **Vault security:** Key derived from non-secret googleUid (known limitation, acceptable for v1)
 
 ---
 
 ## Next Steps
 
-1. **Rewrite BLE transport** based on bitchat architecture:
-   - Binary packet format
-   - GATT write queue (one write at a time, wait for callback)
-   - Fragmentation for large messages
-   - Connection limit management (max 8)
-   - Self-healing scan/advertise recovery
-
-2. **Implement multi-hop relay:**
+1. **Implement multi-hop relay:**
    - TTL-based flood (7 hops max)
-   - Duplicate detection (seen-set with LRU)
+   - Duplicate detection (seen-set with LRU) — done in BLE transport
    - Adaptive relay probability
 
-3. **Implement store-and-forward:**
-   - Cache messages for offline peers
-   - Deliver on reconnect
-
-4. **Fix remaining UI issues:**
+2. **Fix remaining UI issues:**
    - Replace MainScope with rememberCoroutineScope
    - Add message length validation
    - Preserve state across rotation (rememberSaveable)
 
-5. **Security hardening:**
+3. **Security hardening:**
    - Sign E2ECrypto envelopes with Ed25519
    - Add Argon2id to vault key derivation
