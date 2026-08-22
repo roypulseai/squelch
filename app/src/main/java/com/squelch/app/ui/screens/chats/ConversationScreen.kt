@@ -41,6 +41,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.automirrored.filled.Forward
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.SignalWifi4Bar
+import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -144,6 +145,10 @@ fun ConversationScreen(
 
     val inputText = inputField.text
 
+    val showTranslation by viewModel.showTranslation.collectAsState()
+    val preferredLang by viewModel.preferredLang.collectAsState()
+    var translatingMsgId by remember { mutableStateOf<String?>(null) }
+
     LaunchedEffect(messages.size) {
         if (messages.isNotEmpty()) {
             listState.animateScrollToItem(messages.lastIndex)
@@ -197,6 +202,17 @@ fun ConversationScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.padding(end = 4.dp)
                         ) {
+                            Icon(
+                                imageVector = Icons.Filled.Translate,
+                                contentDescription = "Translation",
+                                modifier = Modifier
+                                    .size(20.dp)
+                                    .clickable { viewModel.toggleTranslation() }
+                                    .padding(end = 4.dp),
+                                tint = if (showTranslation) Accent
+                                else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
                             Icon(
                                 imageVector = Icons.Filled.SignalWifi4Bar,
                                 contentDescription = null,
@@ -270,6 +286,8 @@ fun ConversationScreen(
                         isFirstInGroup = isFirstInGroup,
                         showSender = isGroup && !isSelf,
                         senderName = viewModel.getMemberName(msg.sender),
+                        showTranslation = showTranslation && !isSelf,
+                        preferredLang = preferredLang,
                         onLongPress = { showActionsFor = msg }
                     )
                 }
@@ -861,6 +879,8 @@ private fun MessageBubble(
     isFirstInGroup: Boolean,
     showSender: Boolean = false,
     senderName: String = "",
+    showTranslation: Boolean = false,
+    preferredLang: String = "en",
     onLongPress: () -> Unit = {}
 ) {
     val isDark = androidx.compose.foundation.isSystemInDarkTheme()
@@ -870,6 +890,28 @@ private fun MessageBubble(
         if (isDark) ReceivedBubble else ReceivedBubbleLight
     }
     val textColor = if (isDark) DarkOnSurface else LightOnSurface
+
+    var displayText by remember { mutableStateOf(msg.body) }
+    var isTranslating by remember { mutableStateOf(false) }
+    var hasTranslated by remember { mutableStateOf(false) }
+
+    LaunchedEffect(msg.msgId, showTranslation, preferredLang) {
+        if (showTranslation && !hasTranslated) {
+            isTranslating = true
+            com.squelch.app.translate.TranslationManager.translateIfNeeded(
+                msg.body, preferredLang
+            ).let { result ->
+                if (result.translated != null) {
+                    displayText = result.translated
+                }
+                hasTranslated = true
+                isTranslating = false
+            }
+        } else if (!showTranslation) {
+            displayText = msg.body
+            hasTranslated = false
+        }
+    }
 
     val shape = when {
         isSelf && isLastInGroup && isFirstInGroup -> RoundedCornerShape(18.dp, 18.dp, 4.dp, 18.dp)
@@ -917,11 +959,31 @@ private fun MessageBubble(
                     )
                     Spacer(modifier = Modifier.height(1.dp))
                 }
-                Text(
-                    text = msg.body,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = textColor
-                )
+                if (isTranslating) {
+                    Text(
+                        text = "Translating...",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = textColor.copy(alpha = 0.5f),
+                        fontSize = 12.sp
+                    )
+                } else {
+                    Text(
+                        text = displayText,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = textColor
+                    )
+                    if (showTranslation && hasTranslated && displayText != msg.body) {
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "Original: ${msg.body.take(80)}${if (msg.body.length > 80) "..." else ""}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = textColor.copy(alpha = 0.5f),
+                            fontSize = 10.sp,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End,

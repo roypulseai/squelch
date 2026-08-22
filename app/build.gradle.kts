@@ -164,6 +164,10 @@ dependencies {
     // Biometric
     implementation("androidx.biometric:biometric:1.2.0-alpha05")
 
+    // ML Kit Translation (on-device, offline)
+    implementation("com.google.mlkit:translate:17.0.3")
+    implementation("com.google.mlkit:language-id:17.0.5")
+
     // WorkManager (monthly auto-backup)
     implementation("androidx.work:work-runtime-ktx:2.10.1")
 

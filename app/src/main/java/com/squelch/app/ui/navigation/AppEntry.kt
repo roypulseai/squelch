@@ -40,6 +40,7 @@ import com.squelch.app.auth.AuthState
 import com.squelch.app.crypto.Identity
 import com.squelch.app.crypto.VaultSession
 import com.squelch.app.data.local.entity.ContactEntity
+import com.squelch.app.data.local.entity.SettingEntity
 import com.squelch.app.data.remote.DriveBackupManager
 import com.squelch.app.data.remote.FirestoreVaultManager
 import com.squelch.app.data.repository.VaultRepository
@@ -104,6 +105,23 @@ fun AppEntry(
     var restoreChecking by remember { mutableStateOf(true) }
     var isBackingUp by remember { mutableStateOf(false) }
     var driveSignInData by remember { mutableStateOf<android.content.Intent?>(null) }
+
+    var preferredLang by remember { mutableStateOf("en") }
+    var showTranslation by remember { mutableStateOf(false) }
+
+    LaunchedEffect(vaultState) {
+        if (vaultState is VaultState.Unlocked) {
+            val db = vaultRepository.db
+            if (db != null) {
+                try {
+                    val lang = db.settings().get("preferred_language")
+                    if (lang != null) preferredLang = lang
+                    val show = db.settings().get("show_translation")
+                    showTranslation = show == "true"
+                } catch (_: Exception) {}
+            }
+        }
+    }
 
     val driveSignInLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
@@ -714,6 +732,8 @@ fun AppEntry(
                         isBackingUp = isBackingUp,
                         displayName = signed?.displayName ?: "",
                         email = signed?.email ?: "",
+                        preferredLanguage = preferredLang,
+                        showTranslation = showTranslation,
                         onNavigateToProfile = { navController.navigate(Screen.Profile.route) },
                         onNavigateToBlockedUsers = { navController.navigate(Screen.BlockedUsers.route) },
                         onNavigateToPermissions = { navController.navigate(Screen.Permissions.route) },
@@ -752,6 +772,20 @@ fun AppEntry(
                         },
                         onRestore = {
                             navController.navigate(Screen.Restore.route)
+                        },
+                        onSetPreferredLanguage = { langCode ->
+                            preferredLang = langCode
+                            MainScope().launch {
+                                val db = vaultRepository.db
+                                db?.settings()?.put(SettingEntity(key = "preferred_language", value = langCode))
+                            }
+                        },
+                        onToggleTranslation = {
+                            showTranslation = !showTranslation
+                            MainScope().launch {
+                                val db = vaultRepository.db
+                                db?.settings()?.put(SettingEntity(key = "show_translation", value = showTranslation.toString()))
+                            }
                         }
                     )
                 }

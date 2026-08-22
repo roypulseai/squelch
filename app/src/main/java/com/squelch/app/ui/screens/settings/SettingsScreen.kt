@@ -26,14 +26,19 @@ import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Translate
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -57,6 +62,8 @@ fun SettingsScreen(
     isBackingUp: Boolean = false,
     displayName: String = "",
     email: String = "",
+    preferredLanguage: String = "en",
+    showTranslation: Boolean = false,
     onNavigateToProfile: () -> Unit = {},
     onNavigateToBlockedUsers: () -> Unit = {},
     onNavigateToPermissions: () -> Unit = {},
@@ -65,9 +72,23 @@ fun SettingsScreen(
     onEnableBiometric: () -> Unit = {},
     onDisableBiometric: () -> Unit = {},
     onBackupNow: () -> Unit = {},
-    onRestore: () -> Unit = {}
+    onRestore: () -> Unit = {},
+    onSetPreferredLanguage: (String) -> Unit = {},
+    onToggleTranslation: () -> Unit = {}
 ) {
     var checked by remember { mutableStateOf(lockEnabled) }
+    var showLanguagePicker by remember { mutableStateOf(false) }
+
+    val languageNames = mapOf(
+        "en" to "English", "es" to "Spanish", "fr" to "French", "de" to "German",
+        "it" to "Italian", "pt" to "Portuguese", "ru" to "Russian", "zh" to "Chinese",
+        "ja" to "Japanese", "ko" to "Korean", "ar" to "Arabic", "hi" to "Hindi",
+        "tr" to "Turkish", "pl" to "Polish", "nl" to "Dutch", "sv" to "Swedish",
+        "no" to "Norwegian", "da" to "Danish", "fi" to "Finnish", "cs" to "Czech",
+        "el" to "Greek", "he" to "Hebrew", "th" to "Thai", "vi" to "Vietnamese",
+        "id" to "Indonesian", "ms" to "Malay", "uk" to "Ukrainian", "ro" to "Romanian",
+        "hu" to "Hungarian", "bn" to "Bengali", "ta" to "Tamil", "te" to "Telugu"
+    )
 
     Scaffold(
         topBar = {
@@ -138,6 +159,27 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
 
+            SectionHeader("Translation")
+            SettingsItem(
+                icon = Icons.Default.Translate,
+                title = "Translate Messages",
+                subtitle = "Automatically translate received messages",
+                trailing = {
+                    Switch(
+                        checked = showTranslation,
+                        onCheckedChange = { onToggleTranslation() }
+                    )
+                }
+            )
+            SettingsItem(
+                icon = Icons.Default.Translate,
+                title = "Preferred Language",
+                subtitle = languageNames[preferredLanguage] ?: preferredLanguage,
+                onClick = { showLanguagePicker = true }
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
             SectionHeader("Backup & Restore")
             SettingsItem(
                 icon = Icons.Default.Backup,
@@ -187,6 +229,67 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(32.dp))
         }
+    }
+
+    if (showLanguagePicker) {
+        AlertDialog(
+            onDismissRequest = { showLanguagePicker = false },
+            title = { Text("Preferred Language") },
+            text = {
+                Column {
+                    Text(
+                        text = "Messages will be translated to this language",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                    val sortedLanguages = languageNames.entries.sortedBy { it.value }
+                    sortedLanguages.forEach { (code, name) ->
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 1.dp)
+                                .clickable {
+                                    onSetPreferredLanguage(code)
+                                    showLanguagePicker = false
+                                },
+                            color = if (code == preferredLanguage)
+                                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                            else MaterialTheme.colorScheme.surface
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                if (code == preferredLanguage) {
+                                    Icon(
+                                        Icons.Default.Check,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                } else {
+                                    Spacer(modifier = Modifier.width(26.dp))
+                                }
+                                Text(
+                                    text = name,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showLanguagePicker = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }
 

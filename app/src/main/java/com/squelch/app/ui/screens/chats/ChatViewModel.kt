@@ -8,13 +8,17 @@ import com.squelch.app.data.local.entity.BlockedEntity
 import com.squelch.app.data.local.entity.ContactEntity
 import com.squelch.app.data.local.entity.ConversationEntity
 import com.squelch.app.data.local.entity.GroupEntity
+import com.squelch.app.data.local.entity.SettingEntity
 import com.squelch.app.data.local.entity.GroupMemberEntity
 import com.squelch.app.data.local.entity.MessageEntity
 import com.squelch.app.data.repository.VaultRepository
 import com.squelch.app.mesh.engine.MeshEngineManager
 import com.squelch.app.mesh.relay.MessageRelay
 import com.squelch.app.mesh.transport.Transport
+import com.squelch.app.translate.TranslationManager
+import com.squelch.app.translate.TranslationResult
 import dagger.hilt.android.lifecycle.HiltViewModel
+import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flatMapLatest
@@ -95,6 +99,64 @@ class ChatViewModel @Inject constructor(
         vaultRepository.dbReady.flatMapLatest { db ->
             db?.conversations()?.observeAll() ?: flowOf(emptyList())
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    private val _preferredLang = kotlinx.coroutines.flow.MutableStateFlow("en")
+    val preferredLang: kotlinx.coroutines.flow.StateFlow<String> = _preferredLang
+
+    private val _showTranslation = kotlinx.coroutines.flow.MutableStateFlow(false)
+    val showTranslation: kotlinx.coroutines.flow.StateFlow<Boolean> = _showTranslation
+
+    private val translationCache = ConcurrentHashMap<String, TranslationResult>()
+
+    init {
+        viewModelScope.launch {
+            loadLanguageSettings()
+        }
+    }
+
+    private suspend fun loadLanguageSettings() {
+        val db = vaultRepository.db ?: return
+        try {
+            val lang = db.settings().get("preferred_language")
+            if (lang != null) _preferredLang.value = lang
+            val showTrans = db.settings().get("show_translation")
+            _showTranslation.value = showTrans == "true"
+        } catch (_: Exception) {}
+    }
+
+    fun setPreferredLanguage(langCode: String) {
+        _preferredLang.value = langCode
+        viewModelScope.launch {
+            val db = vaultRepository.db ?: return@launch
+            db.settings().put(SettingEntity(key = "preferred_language", value = langCode))
+            translationCache.clear()
+        }
+    }
+
+    fun toggleTranslation() {
+        _showTranslation.value = !_showTranslation.value
+        viewModelScope.launch {
+            val db = vaultRepository.db ?: return@launch
+            db.settings().put(SettingEntity(key = "show_translation", value = _showTranslation.value.toString()))
+        }
+    }
+
+    fun getDisplayText(msg: MessageEntity, onTranslated: (String) -> Unit) {
+        if (!_showTranslation.value || msg.direction == 1) {
+            onTranslated(msg.body)
+            return
+        }
+        val cached = translationCache[msg.msgId]
+        if (cached != null) {
+            onTranslated(cached.translated ?: cached.original)
+            return
+        }
+        viewModelScope.launch {
+            val result = TranslationManager.translateIfNeeded(msg.body, _preferredLang.value)
+            translationCache[msg.msgId] = result
+            onTranslated(result.translated ?: result.original)
+        }
+    }
 
     val contacts: StateFlow<List<ContactEntity>> =
         vaultRepository.dbReady.flatMapLatest { db ->
