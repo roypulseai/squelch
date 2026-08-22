@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -64,6 +65,8 @@ fun SettingsScreen(
     email: String = "",
     preferredLanguage: String = "en",
     showTranslation: Boolean = false,
+    modelDownloadProgress: Float = 0f,
+    isDownloadingModels: Boolean = false,
     onNavigateToProfile: () -> Unit = {},
     onNavigateToBlockedUsers: () -> Unit = {},
     onNavigateToPermissions: () -> Unit = {},
@@ -80,30 +83,21 @@ fun SettingsScreen(
     var showLanguagePicker by remember { mutableStateOf(false) }
 
     val languageNames = mapOf(
-        "af" to "Afrikaans", "sq" to "Albanian", "am" to "Amharic", "ar" to "Arabic",
-        "hy" to "Armenian", "az" to "Azerbaijani", "eu" to "Basque", "be" to "Belarusian",
-        "bn" to "Bengali", "bs" to "Bosnian", "bg" to "Bulgarian", "my" to "Burmese",
-        "ca" to "Catalan", "ceb" to "Cebuano", "zh" to "Chinese", "hr" to "Croatian",
-        "cs" to "Czech", "da" to "Danish", "nl" to "Dutch", "en" to "English",
-        "eo" to "Esperanto", "et" to "Estonian", "fi" to "Finnish", "fr" to "French",
-        "gl" to "Galician", "ka" to "Georgian", "de" to "German", "el" to "Greek",
-        "gu" to "Gujarati", "ht" to "Haitian Creole", "ha" to "Hausa", "he" to "Hebrew",
-        "hi" to "Hindi", "hu" to "Hungarian", "is" to "Icelandic", "id" to "Indonesian",
-        "ga" to "Irish", "it" to "Italian", "ja" to "Japanese", "jv" to "Javanese",
-        "kn" to "Kannada", "kk" to "Kazakh", "km" to "Khmer", "ko" to "Korean",
-        "ku" to "Kurdish", "ky" to "Kyrgyz", "lo" to "Lao", "la" to "Latin",
-        "lv" to "Latvian", "lt" to "Lithuanian", "mk" to "Macedonian", "ms" to "Malay",
-        "ml" to "Malayalam", "mt" to "Maltese", "mi" to "Maori", "mr" to "Marathi",
-        "mn" to "Mongolian", "ne" to "Nepali", "no" to "Norwegian", "ps" to "Pashto",
-        "fa" to "Persian", "pl" to "Polish", "pt" to "Portuguese", "pa" to "Punjabi",
-        "ro" to "Romanian", "ru" to "Russian", "sm" to "Samoan", "gd" to "Scots Gaelic",
-        "sr" to "Serbian", "sn" to "Shona", "sd" to "Sindhi", "si" to "Sinhala",
-        "sk" to "Slovak", "sl" to "Slovenian", "so" to "Somali", "es" to "Spanish",
-        "su" to "Sundanese", "sw" to "Swahili", "sv" to "Swedish", "tg" to "Tajik",
-        "ta" to "Tamil", "tt" to "Tatar", "te" to "Telugu", "th" to "Thai",
-        "tr" to "Turkish", "tk" to "Turkmen", "uk" to "Ukrainian", "ur" to "Urdu",
-        "ug" to "Uyghur", "uz" to "Uzbek", "vi" to "Vietnamese", "cy" to "Welsh",
-        "xh" to "Xhosa", "yi" to "Yiddish", "yo" to "Yoruba", "zu" to "Zulu"
+        "af" to "Afrikaans", "ar" to "Arabic", "be" to "Belarusian", "bg" to "Bulgarian",
+        "bn" to "Bengali", "ca" to "Catalan", "cs" to "Czech", "cy" to "Welsh",
+        "da" to "Danish", "de" to "German", "el" to "Greek", "en" to "English",
+        "eo" to "Esperanto", "es" to "Spanish", "et" to "Estonian", "fa" to "Persian",
+        "fi" to "Finnish", "fr" to "French", "ga" to "Irish", "gl" to "Galician",
+        "gu" to "Gujarati", "he" to "Hebrew", "hi" to "Hindi", "hr" to "Croatian",
+        "ht" to "Haitian Creole", "hu" to "Hungarian", "id" to "Indonesian", "is" to "Icelandic",
+        "it" to "Italian", "ja" to "Japanese", "ka" to "Georgian", "kn" to "Kannada",
+        "ko" to "Korean", "lt" to "Lithuanian", "lv" to "Latvian", "mk" to "Macedonian",
+        "mr" to "Marathi", "ms" to "Malay", "mt" to "Maltese", "nl" to "Dutch",
+        "no" to "Norwegian", "pl" to "Polish", "pt" to "Portuguese", "ro" to "Romanian",
+        "ru" to "Russian", "sk" to "Slovak", "sl" to "Slovenian", "sq" to "Albanian",
+        "sv" to "Swedish", "sw" to "Swahili", "ta" to "Tamil", "te" to "Telugu",
+        "th" to "Thai", "tl" to "Tagalog", "tr" to "Turkish", "uk" to "Ukrainian",
+        "ur" to "Urdu", "vi" to "Vietnamese", "zh" to "Chinese"
     )
 
     Scaffold(
@@ -193,6 +187,35 @@ fun SettingsScreen(
                 subtitle = languageNames[preferredLanguage] ?: preferredLanguage,
                 onClick = { showLanguagePicker = true }
             )
+            if (isDownloadingModels || modelDownloadProgress > 0f) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.CloudDownload,
+                        contentDescription = null,
+                        tint = if (isDownloadingModels) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(20.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = if (isDownloadingModels) "Downloading translation models..." else "Translation models ready",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        LinearProgressIndicator(
+                            progress = { modelDownloadProgress },
+                            modifier = Modifier.fillMaxWidth(),
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
+            }
 
             Spacer(modifier = Modifier.height(8.dp))
 

@@ -92,12 +92,22 @@ object TranslationManager {
             return TranslationResult(original = text, translated = null, sourceLang = null)
         }
 
+        if (preferredLang !in ModelPreloader.SUPPORTED_LANGUAGES) {
+            Log.w(TAG, "Preferred language '$preferredLang' not supported for translation")
+            return TranslationResult(original = text, translated = null, sourceLang = null)
+        }
+
         val detectedLang = detectLanguage(text)
         Log.d(TAG, "translateIfNeeded: detected=$detectedLang, preferred=$preferredLang, text=${text.take(40)}")
 
         if (detectedLang == null) {
             Log.d(TAG, "Language detection returned null/und, showing original")
             return TranslationResult(original = text, translated = null, sourceLang = null)
+        }
+
+        if (detectedLang !in ModelPreloader.SUPPORTED_LANGUAGES) {
+            Log.w(TAG, "Detected language '$detectedLang' not in ML Kit supported list, showing original")
+            return TranslationResult(original = text, translated = null, sourceLang = detectedLang)
         }
 
         if (detectedLang == preferredLang) {

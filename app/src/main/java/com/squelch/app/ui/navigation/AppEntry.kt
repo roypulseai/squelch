@@ -93,7 +93,8 @@ fun AppEntry(
     driveBackupManager: DriveBackupManager,
     firestoreVaultManager: FirestoreVaultManager,
     messageRelay: MessageRelay,
-    meshEngineManager: MeshEngineManager
+    meshEngineManager: MeshEngineManager,
+    modelPreloader: com.squelch.app.translate.ModelPreloader
 ) {
     val navController = rememberNavController()
     val authState by authRepository.state.collectAsState()
@@ -110,6 +111,12 @@ fun AppEntry(
 
     var preferredLang by remember { mutableStateOf("en") }
     var showTranslation by remember { mutableStateOf(false) }
+    val modelDownloadProgress by androidx.compose.runtime.produceState(modelPreloader.progress) {
+        while (true) {
+            value = modelPreloader.progress
+            kotlinx.coroutines.delay(1000)
+        }
+    }
 
     LaunchedEffect(vaultState) {
         if (vaultState is VaultState.Unlocked) {
@@ -196,6 +203,11 @@ fun AppEntry(
                         android.content.Intent(activity, MessageForegroundService::class.java)
                             .putExtra("edPubHex", edPubHex)
                             .also { activity.startForegroundService(it) }
+                    }
+                    if (!modelPreloader.isDownloading && modelPreloader.progress < 1f) {
+                        scope.launch {
+                            modelPreloader.preloadAllModels()
+                        }
                     }
                 }
                 val current = navController.currentDestination?.route
@@ -736,6 +748,8 @@ fun AppEntry(
                         email = signed?.email ?: "",
                         preferredLanguage = preferredLang,
                         showTranslation = showTranslation,
+                        modelDownloadProgress = modelDownloadProgress,
+                        isDownloadingModels = modelPreloader.isDownloading,
                         onNavigateToProfile = { navController.navigate(Screen.Profile.route) },
                         onNavigateToBlockedUsers = { navController.navigate(Screen.BlockedUsers.route) },
                         onNavigateToPermissions = { navController.navigate(Screen.Permissions.route) },
