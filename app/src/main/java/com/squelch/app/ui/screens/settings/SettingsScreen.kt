@@ -80,14 +80,30 @@ fun SettingsScreen(
     var showLanguagePicker by remember { mutableStateOf(false) }
 
     val languageNames = mapOf(
-        "en" to "English", "es" to "Spanish", "fr" to "French", "de" to "German",
-        "it" to "Italian", "pt" to "Portuguese", "ru" to "Russian", "zh" to "Chinese",
-        "ja" to "Japanese", "ko" to "Korean", "ar" to "Arabic", "hi" to "Hindi",
-        "tr" to "Turkish", "pl" to "Polish", "nl" to "Dutch", "sv" to "Swedish",
-        "no" to "Norwegian", "da" to "Danish", "fi" to "Finnish", "cs" to "Czech",
-        "el" to "Greek", "he" to "Hebrew", "th" to "Thai", "vi" to "Vietnamese",
-        "id" to "Indonesian", "ms" to "Malay", "uk" to "Ukrainian", "ro" to "Romanian",
-        "hu" to "Hungarian", "bn" to "Bengali", "ta" to "Tamil", "te" to "Telugu"
+        "af" to "Afrikaans", "sq" to "Albanian", "am" to "Amharic", "ar" to "Arabic",
+        "hy" to "Armenian", "az" to "Azerbaijani", "eu" to "Basque", "be" to "Belarusian",
+        "bn" to "Bengali", "bs" to "Bosnian", "bg" to "Bulgarian", "my" to "Burmese",
+        "ca" to "Catalan", "ceb" to "Cebuano", "zh" to "Chinese", "hr" to "Croatian",
+        "cs" to "Czech", "da" to "Danish", "nl" to "Dutch", "en" to "English",
+        "eo" to "Esperanto", "et" to "Estonian", "fi" to "Finnish", "fr" to "French",
+        "gl" to "Galician", "ka" to "Georgian", "de" to "German", "el" to "Greek",
+        "gu" to "Gujarati", "ht" to "Haitian Creole", "ha" to "Hausa", "he" to "Hebrew",
+        "hi" to "Hindi", "hu" to "Hungarian", "is" to "Icelandic", "id" to "Indonesian",
+        "ga" to "Irish", "it" to "Italian", "ja" to "Japanese", "jv" to "Javanese",
+        "kn" to "Kannada", "kk" to "Kazakh", "km" to "Khmer", "ko" to "Korean",
+        "ku" to "Kurdish", "ky" to "Kyrgyz", "lo" to "Lao", "la" to "Latin",
+        "lv" to "Latvian", "lt" to "Lithuanian", "mk" to "Macedonian", "ms" to "Malay",
+        "ml" to "Malayalam", "mt" to "Maltese", "mi" to "Maori", "mr" to "Marathi",
+        "mn" to "Mongolian", "ne" to "Nepali", "no" to "Norwegian", "ps" to "Pashto",
+        "fa" to "Persian", "pl" to "Polish", "pt" to "Portuguese", "pa" to "Punjabi",
+        "ro" to "Romanian", "ru" to "Russian", "sm" to "Samoan", "gd" to "Scots Gaelic",
+        "sr" to "Serbian", "sn" to "Shona", "sd" to "Sindhi", "si" to "Sinhala",
+        "sk" to "Slovak", "sl" to "Slovenian", "so" to "Somali", "es" to "Spanish",
+        "su" to "Sundanese", "sw" to "Swahili", "sv" to "Swedish", "tg" to "Tajik",
+        "ta" to "Tamil", "tt" to "Tatar", "te" to "Telugu", "th" to "Thai",
+        "tr" to "Turkish", "tk" to "Turkmen", "uk" to "Ukrainian", "ur" to "Urdu",
+        "ug" to "Uyghur", "uz" to "Uzbek", "vi" to "Vietnamese", "cy" to "Welsh",
+        "xh" to "Xhosa", "yi" to "Yiddish", "yo" to "Yoruba", "zu" to "Zulu"
     )
 
     Scaffold(

@@ -72,9 +72,10 @@ import com.squelch.app.ui.screens.settings.SettingsScreen
 import com.squelch.app.ui.screens.settings.ProfileScreen
 import com.squelch.app.util.toHex
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.compose.runtime.rememberCoroutineScope
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.tasks.await
 
@@ -98,6 +99,7 @@ fun AppEntry(
     val authState by authRepository.state.collectAsState()
     val vaultState by vaultRepository.state.collectAsState()
     val activity = LocalContext.current as FragmentActivity
+    val scope = rememberCoroutineScope()
 
     val isSignedIn = authState is AuthState.SignedIn
 
@@ -130,7 +132,7 @@ fun AppEntry(
             val success = driveBackupManager.onDriveSignInResult(result.data)
             if (success) {
                 isBackingUp = true
-                MainScope().launch {
+                scope.launch {
                     performBackup(driveBackupManager, firestoreVaultManager, authRepository)
                     isBackingUp = false
                 }
@@ -309,7 +311,7 @@ fun AppEntry(
                         onRestore = {
                             restoring = true
                             restoreError = null
-                            MainScope().launch {
+                            scope.launch {
                                 try {
                                     val vaultBlob = driveBackupManager.restoreVault()
                                     if (vaultBlob != null) {
@@ -386,7 +388,7 @@ fun AppEntry(
                         onContactSelected = { contact ->
                             val convId = contact.pubkey
                             val convName = contact.callsign.ifEmpty { contact.displayName }
-                            MainScope().launch {
+                            scope.launch {
                                 withContext(Dispatchers.IO) {
                                     val db = vaultRepository.db ?: return@withContext
                                     val existing = db.conversations().get(convId)
@@ -572,7 +574,7 @@ fun AppEntry(
                         onContactClick = { contact ->
                             val convId = contact.pubkey
                             val convName = contact.callsign.ifEmpty { contact.displayName }
-                            MainScope().launch {
+                            scope.launch {
                                 withContext(Dispatchers.IO) {
                                     val db = vaultRepository.db ?: return@withContext
                                     val existing = db.conversations().get(convId)
@@ -602,7 +604,7 @@ fun AppEntry(
                     AddContactScreen(
                         onBack = { navController.popBackStack() },
                         onQrScanned = { contact ->
-                            MainScope().launch {
+                            scope.launch {
                                 withContext(Dispatchers.IO) {
                                     val db = vaultRepository.db
                                     val existing = db?.contacts()?.get(contact.edPub)
@@ -638,7 +640,7 @@ fun AppEntry(
                     UserSearchScreen(
                         onBack = { navController.popBackStack() },
                         onAddContact = { result ->
-                            MainScope().launch {
+                            scope.launch {
                                 withContext(Dispatchers.IO) {
                                     vaultRepository.db?.contacts()?.upsert(
                                         ContactEntity(
@@ -687,7 +689,7 @@ fun AppEntry(
                     RadarScreen(
                         viewModel = radarViewModel,
                         onUserTap = { edPub, displayName ->
-                            MainScope().launch {
+                            scope.launch {
                                 withContext(Dispatchers.IO) {
                                     val db = vaultRepository.db ?: return@withContext
                                     val existing = db.conversations().get(edPub)
@@ -705,7 +707,7 @@ fun AppEntry(
                             navController.navigate(Screen.Conversation.createRoute(edPub, displayName, false))
                         },
                         onPeerTap = { peerId, peerName ->
-                            MainScope().launch {
+                            scope.launch {
                                 withContext(Dispatchers.IO) {
                                     val db = vaultRepository.db ?: return@withContext
                                     val existing = db.conversations().get(peerId)
@@ -758,7 +760,7 @@ fun AppEntry(
                         },
                         onBackupNow = {
                             isBackingUp = true
-                            MainScope().launch {
+                            scope.launch {
                                 val hasAccess = driveBackupManager.ensureDriveAccess()
                                 if (hasAccess) {
                                     performBackup(driveBackupManager, firestoreVaultManager, authRepository)
@@ -775,14 +777,14 @@ fun AppEntry(
                         },
                         onSetPreferredLanguage = { langCode ->
                             preferredLang = langCode
-                            MainScope().launch {
+                            scope.launch {
                                 val db = vaultRepository.db
                                 db?.settings()?.put(SettingEntity(key = "preferred_language", value = langCode))
                             }
                         },
                         onToggleTranslation = {
                             showTranslation = !showTranslation
-                            MainScope().launch {
+                            scope.launch {
                                 val db = vaultRepository.db
                                 db?.settings()?.put(SettingEntity(key = "show_translation", value = showTranslation.toString()))
                             }

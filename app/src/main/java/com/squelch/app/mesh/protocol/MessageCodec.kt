@@ -10,7 +10,10 @@ object MessageCodec {
         val recipient: String,
         val msgId: String,
         val ciphertext: ByteArray,
-        val timestamp: Long
+        val timestamp: Long,
+        val ttl: Int = 7,
+        val hopCount: Int = 0,
+        val originalSender: String = sender
     ) {
         override fun equals(other: Any?): Boolean {
             if (this === other) return true
@@ -27,6 +30,11 @@ object MessageCodec {
             put("id", msg.msgId)
             put("ct", Base64.getEncoder().encodeToString(msg.ciphertext))
             put("ts", msg.timestamp)
+            put("ttl", msg.ttl)
+            put("hc", msg.hopCount)
+            if (msg.originalSender != msg.sender) {
+                put("os", msg.originalSender)
+            }
         }
         return json.toString().toByteArray(Charsets.UTF_8)
     }
@@ -39,7 +47,10 @@ object MessageCodec {
                 recipient = json.getString("r"),
                 msgId = json.getString("id"),
                 ciphertext = Base64.getDecoder().decode(json.getString("ct")),
-                timestamp = json.getLong("ts")
+                timestamp = json.getLong("ts"),
+                ttl = json.optInt("ttl", 7),
+                hopCount = json.optInt("hc", 0),
+                originalSender = json.optString("os", json.getString("s"))
             )
         } catch (e: Exception) {
             null

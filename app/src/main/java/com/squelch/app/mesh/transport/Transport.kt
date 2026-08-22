@@ -25,6 +25,8 @@ interface Transport {
             const val KIND_EDIT = 5
             const val KIND_BLOCKED = 6
             const val KIND_UNBLOCKED = 7
+            const val KIND_TYPING = 8
+            const val KIND_PRESENCE = 9
         }
     }
 }

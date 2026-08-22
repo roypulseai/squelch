@@ -36,8 +36,10 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.automirrored.filled.Forward
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.SignalWifi4Bar
@@ -92,6 +94,8 @@ import com.squelch.app.ui.theme.ReceivedBubble
 import com.squelch.app.ui.theme.ReceivedBubbleLight
 import com.squelch.app.ui.theme.SentBubble
 import com.squelch.app.ui.theme.SentBubbleLight
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -147,7 +151,12 @@ fun ConversationScreen(
 
     val showTranslation by viewModel.showTranslation.collectAsState()
     val preferredLang by viewModel.preferredLang.collectAsState()
-    var translatingMsgId by remember { mutableStateOf<String?>(null) }
+
+    val isPeerTyping = if (!isGroup) {
+        val typingPeers by viewModel.typingPeers.collectAsState()
+        val lastTyping = typingPeers[conversationId]
+        lastTyping != null && (System.currentTimeMillis() - lastTyping) < 5000
+    } else false
 
     LaunchedEffect(messages.size) {
         if (messages.isNotEmpty()) {
@@ -157,6 +166,14 @@ fun ConversationScreen(
 
     LaunchedEffect(conversationId) {
         viewModel.clearUnread(conversationId)
+    }
+
+    var showSearch by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
+
+    val filteredMessages = remember(messages, searchQuery) {
+        if (searchQuery.isBlank()) messages
+        else messages.filter { it.body.contains(searchQuery, ignoreCase = true) }
     }
 
     Scaffold(
@@ -193,15 +210,33 @@ fun ConversationScreen(
                                 overflow = TextOverflow.Ellipsis
                             )
                             Text(
-                                text = if (isGroup) "group \u00b7 ${groupMembers.size} members" else "online",
+                                text = when {
+                                    isGroup -> "group \u00b7 ${groupMembers.size} members"
+                                    isPeerTyping -> "typing..."
+                                    else -> "online"
+                                },
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = if (isPeerTyping) Accent else MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.padding(end = 4.dp)
                         ) {
+                            Icon(
+                                imageVector = Icons.Filled.Search,
+                                contentDescription = "Search",
+                                modifier = Modifier
+                                    .size(20.dp)
+                                    .clickable {
+                                        showSearch = !showSearch
+                                        if (!showSearch) searchQuery = ""
+                                    }
+                                    .padding(end = 4.dp),
+                                tint = if (showSearch) Accent
+                                else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.width(2.dp))
                             Icon(
                                 imageVector = Icons.Filled.Translate,
                                 contentDescription = "Translation",
@@ -252,6 +287,59 @@ fun ConversationScreen(
                 .imePadding()
                 .navigationBarsPadding()
         ) {
+            if (showSearch) {
+                Surface(
+                    color = MaterialTheme.colorScheme.surface,
+                    shadowElevation = 2.dp
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Filled.Search,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        BasicTextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            modifier = Modifier.weight(1f),
+                            textStyle = TextStyle(
+                                color = MaterialTheme.colorScheme.onSurface,
+                                fontSize = 14.sp
+                            ),
+                            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                            singleLine = true,
+                            decorationBox = { inner ->
+                                if (searchQuery.isEmpty()) {
+                                    Text(
+                                        "Search messages...",
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontSize = 14.sp
+                                    )
+                                }
+                                inner()
+                            }
+                        )
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(onClick = { searchQuery = "" }, modifier = Modifier.size(20.dp)) {
+                                Icon(Icons.Filled.Close, contentDescription = "Clear", modifier = Modifier.size(14.dp))
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            "${filteredMessages.size}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
             LazyColumn(
                 modifier = Modifier
                     .weight(1f)
@@ -260,10 +348,10 @@ fun ConversationScreen(
                 state = listState,
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 4.dp)
             ) {
-                itemsIndexed(messages, key = { _, msg -> msg.msgId }) { index, msg ->
+                itemsIndexed(filteredMessages, key = { _, msg -> msg.msgId }) { index, msg ->
                     val isSelf = msg.direction == 1
-                    val prevMsg = messages.getOrNull(index - 1)
-                    val nextMsg = messages.getOrNull(index + 1)
+                    val prevMsg = filteredMessages.getOrNull(index - 1)
+                    val nextMsg = filteredMessages.getOrNull(index + 1)
 
                     val showTimestampHeader = shouldShowTimestampHeader(prevMsg, msg)
 
@@ -894,22 +982,33 @@ private fun MessageBubble(
     var displayText by remember { mutableStateOf(msg.body) }
     var isTranslating by remember { mutableStateOf(false) }
     var hasTranslated by remember { mutableStateOf(false) }
+    var translationFailed by remember { mutableStateOf(false) }
 
     LaunchedEffect(msg.msgId, showTranslation, preferredLang) {
-        if (showTranslation && !hasTranslated) {
+        if (showTranslation && !hasTranslated && !translationFailed) {
             isTranslating = true
-            com.squelch.app.translate.TranslationManager.translateIfNeeded(
-                msg.body, preferredLang
-            ).let { result ->
-                if (result.translated != null) {
+            try {
+                val result = withContext(Dispatchers.IO) {
+                    com.squelch.app.translate.TranslationManager.translateIfNeeded(
+                        msg.body, preferredLang
+                    )
+                }
+                if (result.translated != null && result.translated != msg.body) {
                     displayText = result.translated
+                } else {
+                    displayText = msg.body
                 }
                 hasTranslated = true
+            } catch (e: Exception) {
+                displayText = msg.body
+                translationFailed = true
+            } finally {
                 isTranslating = false
             }
         } else if (!showTranslation) {
             displayText = msg.body
             hasTranslated = false
+            translationFailed = false
         }
     }
 

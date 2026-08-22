@@ -18,6 +18,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
 import java.util.UUID
 import javax.inject.Inject
@@ -36,6 +39,8 @@ class MeshEngineManager @Inject constructor(
     @Volatile
     private var engine: MeshEngine? = null
     private var scope: CoroutineScope? = null
+    private val _typingEvents = kotlinx.coroutines.flow.MutableSharedFlow<String>(extraBufferCapacity = 16)
+    val typingEvents: kotlinx.coroutines.flow.SharedFlow<String> = _typingEvents.asSharedFlow()
 
     @Synchronized
     fun getOrCreate(): MeshEngine? {
@@ -74,6 +79,13 @@ class MeshEngineManager @Inject constructor(
                 if (incoming.senderEdPubHex == eng.selfPubHex) return@collect
 
                 val plaintext = String(incoming.plaintext, Charsets.UTF_8)
+
+                // Handle typing indicator
+                if (plaintext.startsWith("{\"typing\":")) {
+                    _typingEvents.emit(incoming.senderEdPubHex)
+                    return@collect
+                }
+
                 val contact = db.contacts().get(incoming.senderEdPubHex)
                 val senderName = contact?.displayName?.ifEmpty { null }
                     ?: contact?.callsign?.ifEmpty { null }

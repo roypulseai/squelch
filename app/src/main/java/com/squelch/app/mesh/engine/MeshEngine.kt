@@ -12,6 +12,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -29,6 +30,9 @@ class MeshEngine(
 ) {
     companion object {
         private const val TAG = "MeshEngine"
+        private const val SEEN_SET_MAX = 2000
+        private const val PRESENCE_BROADCAST_INTERVAL_MS = 30_000L
+        private const val PEER_TIMEOUT_MS = 60_000L
     }
 
     private var scope: CoroutineScope? = null
@@ -41,13 +45,28 @@ class MeshEngine(
     private val _peers = MutableStateFlow<Set<String>>(emptySet())
     val peers: StateFlow<Set<String>> = _peers.asStateFlow()
 
+    private val _onlinePeers = MutableStateFlow<Set<String>>(emptySet())
+    val onlinePeers: StateFlow<Set<String>> = _onlinePeers.asStateFlow()
+
     private val _messages = MutableSharedFlow<IncomingMessage>(extraBufferCapacity = 64)
     val messages: SharedFlow<IncomingMessage> = _messages.asSharedFlow()
+
+    // Duplicate detection
+    private val seenMessages = object : LinkedHashMap<String, Long>(SEEN_SET_MAX, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Long>?): Boolean {
+            return size > SEEN_SET_MAX
+        }
+    }
+
+    // Presence tracking
+    private val peerLastSeen = ConcurrentHashMap<String, Long>()
 
     data class IncomingMessage(
         val senderEdPubHex: String,
         val plaintext: ByteArray,
-        val timestamp: Long
+        val timestamp: Long,
+        val hopCount: Int = 0,
+        val originalSender: String = ""
     )
 
     fun start() {
@@ -72,6 +91,14 @@ class MeshEngine(
                 }
             }
         }
+        // Periodic presence broadcast
+        s.launch {
+            while (isRunning) {
+                delay(PRESENCE_BROADCAST_INTERVAL_MS)
+                broadcastPresence()
+                pruneStalePeers()
+            }
+        }
     }
 
     fun stop() {
@@ -81,6 +108,7 @@ class MeshEngine(
             try { transport.stop() } catch (_: Exception) {}
         }
         sessions.clear()
+        peerLastSeen.clear()
         scope?.cancel()
         scope = null
     }
@@ -101,7 +129,9 @@ class MeshEngine(
             recipient = recipientEdPubHex,
             msgId = UUID.randomUUID().toString(),
             ciphertext = ciphertext,
-            timestamp = System.currentTimeMillis()
+            timestamp = System.currentTimeMillis(),
+            ttl = 7,
+            hopCount = 0
         )
         val encoded = MessageCodec.encode(msg)
         for (transport in transports) {
@@ -118,6 +148,8 @@ class MeshEngine(
         if (sender == identity.edPub.toHex()) return
 
         _peers.value = _peers.value + sender
+        peerLastSeen[sender] = System.currentTimeMillis()
+        _onlinePeers.value = _onlinePeers.value + sender
 
         when (frame.kind) {
             Transport.TransportFrame.KIND_HELLO -> {
@@ -135,6 +167,14 @@ class MeshEngine(
                 try { handleData(sender, frame.payload) } catch (e: Exception) {
                     Log.e(TAG, "Data handling failed: ${e.message}")
                 }
+            }
+            Transport.TransportFrame.KIND_TYPING -> {
+                try { handleTyping(sender, frame.payload) } catch (e: Exception) {
+                    Log.e(TAG, "Typing handling failed: ${e.message}")
+                }
+            }
+            Transport.TransportFrame.KIND_PRESENCE -> {
+                handlePresenceUpdate(sender)
             }
         }
     }
@@ -193,18 +233,88 @@ class MeshEngine(
         try {
             val plaintext = session.decrypt(payload)
             val msg = MessageCodec.decode(plaintext) ?: return
-            if (msg.recipient != identity.edPub.toHex()) return
-            scope?.launch {
-                _messages.emit(
-                    IncomingMessage(
-                        senderEdPubHex = msg.sender,
-                        plaintext = msg.ciphertext,
-                        timestamp = msg.timestamp
+
+            // Duplicate detection
+            synchronized(seenMessages) {
+                if (seenMessages.containsKey(msg.msgId)) return
+                seenMessages[msg.msgId] = System.currentTimeMillis()
+            }
+
+            // If this message is for us, deliver to app
+            if (msg.recipient == identity.edPub.toHex()) {
+                scope?.launch {
+                    _messages.emit(
+                        IncomingMessage(
+                            senderEdPubHex = msg.sender,
+                            plaintext = msg.ciphertext,
+                            timestamp = msg.timestamp,
+                            hopCount = msg.hopCount,
+                            originalSender = msg.originalSender
+                        )
                     )
+                }
+            }
+
+            // Multi-hop relay: forward if TTL allows
+            if (msg.ttl > msg.hopCount + 1 && msg.recipient != identity.edPub.toHex()) {
+                val relayed = msg.copy(
+                    sender = identity.edPub.toHex(),
+                    hopCount = msg.hopCount + 1
                 )
+                val relayedEncoded = MessageCodec.encode(relayed)
+                Log.d(TAG, "Relaying message ${msg.msgId.take(8)} hop=${msg.hopCount + 1} ttl=${msg.ttl}")
+                for (transport in transports) {
+                    try {
+                        transport.send(msg.recipient, relayedEncoded)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Relay via ${transport.name} failed: ${e.message}")
+                    }
+                }
             }
         } catch (e: Exception) {
             Log.e(TAG, "Decrypt failed from $sender: ${e.message}")
+        }
+    }
+
+    private fun handleTyping(sender: String, payload: ByteArray) {
+        scope?.launch {
+            _messages.emit(
+                IncomingMessage(
+                    senderEdPubHex = sender,
+                    plaintext = payload,
+                    timestamp = System.currentTimeMillis(),
+                    originalSender = sender
+                )
+            )
+        }
+    }
+
+    private fun handlePresenceUpdate(sender: String) {
+        peerLastSeen[sender] = System.currentTimeMillis()
+        _onlinePeers.value = _onlinePeers.value + sender
+    }
+
+    private fun broadcastPresence() {
+        val presenceData = "{\"typing\":false}".toByteArray(Charsets.UTF_8)
+        for (transport in transports) {
+            try {
+                transport.send("", presenceData)
+            } catch (_: Exception) {}
+        }
+    }
+
+    private fun pruneStalePeers() {
+        val now = System.currentTimeMillis()
+        val stalePeers = peerLastSeen.entries
+            .filter { now - it.value > PEER_TIMEOUT_MS }
+            .map { it.key }
+        if (stalePeers.isNotEmpty()) {
+            val current = _onlinePeers.value.toMutableSet()
+            current.removeAll(stalePeers.toSet())
+            _onlinePeers.value = current
+            for (peer in stalePeers) {
+                peerLastSeen.remove(peer)
+            }
         }
     }
 

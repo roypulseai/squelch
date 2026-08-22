@@ -46,6 +46,11 @@ class ChatViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
+            meshEngineManager.typingEvents.collect { peerPubHex ->
+                onTypingReceived(peerPubHex)
+            }
+        }
+        viewModelScope.launch {
             for (event in messageRelay.blockEvents) {
                 val database = db ?: continue
                 val contact = try {
@@ -152,9 +157,13 @@ class ChatViewModel @Inject constructor(
             return
         }
         viewModelScope.launch {
-            val result = TranslationManager.translateIfNeeded(msg.body, _preferredLang.value)
-            translationCache[msg.msgId] = result
-            onTranslated(result.translated ?: result.original)
+            try {
+                val result = TranslationManager.translateIfNeeded(msg.body, _preferredLang.value)
+                translationCache[msg.msgId] = result
+                onTranslated(result.translated ?: result.original)
+            } catch (e: Exception) {
+                onTranslated(msg.body)
+            }
         }
     }
 
@@ -162,6 +171,27 @@ class ChatViewModel @Inject constructor(
         vaultRepository.dbReady.flatMapLatest { db ->
             db?.contacts()?.observeAll() ?: flowOf(emptyList())
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // Typing indicators
+    private val _typingPeers = kotlinx.coroutines.flow.MutableStateFlow<Map<String, Long>>(emptyMap())
+    val typingPeers: kotlinx.coroutines.flow.StateFlow<Map<String, Long>> = _typingPeers
+
+    fun onTypingReceived(peerPubHex: String) {
+        _typingPeers.value = _typingPeers.value + (peerPubHex to System.currentTimeMillis())
+        viewModelScope.launch {
+            kotlinx.coroutines.delay(5000)
+            val current = _typingPeers.value.toMutableMap()
+            if (current[peerPubHex] == System.currentTimeMillis() - 5000) {
+                current.remove(peerPubHex)
+                _typingPeers.value = current
+            }
+        }
+    }
+
+    fun isPeerTyping(conversationId: String): Boolean {
+        val lastTyping = _typingPeers.value[conversationId] ?: return false
+        return System.currentTimeMillis() - lastTyping < 5000
+    }
 
     val groups: StateFlow<List<GroupEntity>> =
         vaultRepository.dbReady.flatMapLatest { db ->
