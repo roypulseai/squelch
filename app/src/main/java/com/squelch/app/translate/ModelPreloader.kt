@@ -75,7 +75,7 @@ class ModelPreloader @Inject constructor() {
             _failedModels.value = emptyList()
             downloadedModels = 0
             currentIndex = 0
-            SUPPORTED_LANGUAGES.filter { it != "en" }.toList()
+            SUPPORTED_LANGUAGES.toList()
         }
         retryOnly = false
 
@@ -129,31 +129,6 @@ class ModelPreloader @Inject constructor() {
                 downloadedModels++
                 _progress.value = downloadedModels.toFloat() / totalModels
                 onProgress?.invoke(_progress.value, downloadedModels, totalModels)
-            }
-        }
-
-        // Also download English → preferredLang for reverse translation
-        if (preferredLang != "en" && !retryOnly) {
-            try {
-                val lang = TranslateLanguage.fromLanguageTag(preferredLang)
-                if (lang != null) {
-                    _currentModel.value = "en→$preferredLang"
-                    _statusText.value = "Downloading English → $preferredLang"
-                    val model = TranslateRemoteModel.Builder(lang).build()
-                    val result = withTimeoutOrNull(PER_MODEL_TIMEOUT_MS) {
-                        modelManager.download(model, conditions).await()
-                    }
-                    if (result == null) {
-                        Log.w(TAG, "Reverse model download timed out for en→$preferredLang")
-                        failed.add("en→$preferredLang")
-                    } else {
-                        Log.d(TAG, "Downloaded reverse model: en→$preferredLang")
-                    }
-                }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed to download reverse model en→$preferredLang: ${e.message}")
             }
         }
 

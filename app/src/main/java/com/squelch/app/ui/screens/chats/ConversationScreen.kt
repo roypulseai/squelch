@@ -1000,13 +1000,11 @@ private fun MessageBubble(
     val textColor = if (isDark) DarkOnSurface else LightOnSurface
 
     var displayText by remember { mutableStateOf(msg.body) }
-    var isTranslating by remember { mutableStateOf(false) }
     var hasTranslated by remember { mutableStateOf(false) }
     var translationFailed by remember { mutableStateOf(false) }
 
     LaunchedEffect(msg.msgId, showTranslation, preferredLang) {
         if (showTranslation && !hasTranslated && !translationFailed) {
-            isTranslating = true
             try {
                 val result = withContext(Dispatchers.IO) {
                     kotlinx.coroutines.withTimeoutOrNull(25_000L) {
@@ -1022,8 +1020,6 @@ private fun MessageBubble(
             } catch (e: Exception) {
                 android.util.Log.e("MessageBubble", "Translation crashed: ${e.message}")
                 translationFailed = true
-            } finally {
-                isTranslating = false
             }
         } else if (!showTranslation) {
             displayText = msg.body
@@ -1078,30 +1074,21 @@ private fun MessageBubble(
                     )
                     Spacer(modifier = Modifier.height(1.dp))
                 }
-                if (isTranslating) {
+                Text(
+                    text = displayText,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = textColor
+                )
+                if (showTranslation && hasTranslated && displayText != msg.body) {
+                    Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = "Translating...",
-                        style = MaterialTheme.typography.bodySmall,
+                        text = "Original: ${msg.body.take(80)}${if (msg.body.length > 80) "..." else ""}",
+                        style = MaterialTheme.typography.labelSmall,
                         color = textColor.copy(alpha = 0.5f),
-                        fontSize = 12.sp
+                        fontSize = 10.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
                     )
-                } else {
-                    Text(
-                        text = displayText,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = textColor
-                    )
-                    if (showTranslation && hasTranslated && displayText != msg.body) {
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = "Original: ${msg.body.take(80)}${if (msg.body.length > 80) "..." else ""}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = textColor.copy(alpha = 0.5f),
-                            fontSize = 10.sp,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
                 }
                 Row(
                     modifier = Modifier.fillMaxWidth(),

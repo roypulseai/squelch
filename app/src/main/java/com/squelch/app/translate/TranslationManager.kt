@@ -23,7 +23,7 @@ object TranslationManager {
 
     private val languageIdentifier = LanguageIdentification.getClient()
     private val translators = ConcurrentHashMap<String, Translator>()
-    private val downloadStates = ConcurrentHashMap<String, Boolean>()
+    private val downloadedLangs = ConcurrentHashMap.newKeySet<String>()
     private val downloadConditions = DownloadConditions.Builder().build()
 
     fun isLanguageSupported(langCode: String): Boolean {
@@ -66,8 +66,8 @@ object TranslationManager {
         }
 
         try {
-            if (downloadStates[key] != true) {
-                Log.d(TAG, "Downloading model for $sourceLang -> $targetLang")
+            if (sourceLang !in downloadedLangs || targetLang !in downloadedLangs) {
+                Log.d(TAG, "Downloading models for $sourceLang -> $targetLang")
                 val result = withTimeoutOrNull(MODEL_DOWNLOAD_TIMEOUT_MS) {
                     translator.downloadModelIfNeeded(downloadConditions).await()
                 }
@@ -75,8 +75,9 @@ object TranslationManager {
                     Log.w(TAG, "Model download timed out for $sourceLang -> $targetLang")
                     return@withContext null
                 }
-                downloadStates[key] = true
-                Log.d(TAG, "Model downloaded for $sourceLang -> $targetLang")
+                downloadedLangs.add(sourceLang)
+                downloadedLangs.add(targetLang)
+                Log.d(TAG, "Models downloaded for $sourceLang -> $targetLang")
             }
 
             val translated = withTimeoutOrNull(TRANSLATE_TIMEOUT_MS) {
@@ -132,7 +133,7 @@ object TranslationManager {
     fun close() {
         translators.values.forEach { it.close() }
         translators.clear()
-        downloadStates.clear()
+        downloadedLangs.clear()
     }
 }
 
