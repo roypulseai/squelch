@@ -251,6 +251,33 @@ fun AppEntry(
     val currentRoute = navBackStackEntry?.destination?.route
     val showBottomBar = currentRoute in bottomNavRoutes
 
+    val pendingConvId by com.squelch.app.MainActivity.pendingConversationId.collectAsState()
+    LaunchedEffect(pendingConvId) {
+        val convId = pendingConvId
+        if (convId != null && vaultState is VaultState.Unlocked) {
+            com.squelch.app.MainActivity.consumePendingConversationId()
+            val db = vaultRepository.db
+            val conv = try { db?.conversations()?.get(convId) } catch (_: Exception) { null }
+            val convName = conv?.name ?: convId.take(16)
+            navController.navigate(Screen.Conversation.createRoute(convId, convName, false)) {
+                popUpTo(Screen.Chats.route) { inclusive = false }
+                launchSingleTop = true
+            }
+        }
+    }
+
+    val pendingMarkReadId by com.squelch.app.MainActivity.pendingMarkRead.collectAsState()
+    LaunchedEffect(pendingMarkReadId) {
+        val convId = pendingMarkReadId
+        if (convId != null) {
+            com.squelch.app.MainActivity.consumePendingMarkRead()
+            try {
+                vaultRepository.db?.conversations()?.clearUnread(convId)
+                vaultRepository.db?.messages()?.markAllRead(convId, System.currentTimeMillis())
+            } catch (_: Exception) {}
+        }
+    }
+
     val contactsFlow = remember(vaultState) {
         vaultRepository.db?.contacts()?.observeAll()
     }

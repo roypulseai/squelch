@@ -9,11 +9,15 @@ import android.content.Intent
 import android.os.IBinder
 import android.util.Base64
 import android.util.Log
+import com.squelch.app.crypto.E2ECrypto
+import com.squelch.app.crypto.Identity
 import com.squelch.app.MainActivity
 import com.squelch.app.R
 import com.squelch.app.data.local.SquelchDatabase
 import com.squelch.app.data.local.entity.ConversationEntity
 import com.squelch.app.data.local.entity.MessageEntity
+import com.squelch.app.util.toHex
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.*
 import kotlinx.coroutines.tasks.await
@@ -118,14 +122,29 @@ class MessageForegroundService : Service() {
                             continue
                         }
                         val payloadB64 = doc.getString("payload") ?: continue
-                        val body = Base64.decode(payloadB64, Base64.NO_WRAP).toString(Charsets.UTF_8)
+                        val rawBody = try {
+                            Base64.decode(payloadB64, Base64.NO_WRAP).toString(Charsets.UTF_8)
+                        } catch (_: Exception) { continue }
                         val senderName = doc.getString("senderName") ?: sender.take(8)
                         val senderEmail = doc.getString("senderEmail") ?: ""
                         val msgId = doc.getString("msgId") ?: UUID.randomUUID().toString()
 
-                        if (body.contains("\"hs\":") && body.contains("\"s\":") && body.contains("\"r\":")) {
+                        if (rawBody.contains("\"hs\":") && rawBody.contains("\"s\":") && rawBody.contains("\"r\":")) {
                             doc.reference.delete()
                             continue
+                        }
+
+                        val body = if (rawBody.contains("\"ct\":") && rawBody.contains("\"xp\":")) {
+                            try {
+                                val googleUid = FirebaseAuth.getInstance().currentUser?.uid
+                                if (googleUid != null) {
+                                    val identity = Identity.fromGoogleUid(googleUid)
+                                    val result = E2ECrypto.decryptWithMyKey(identity.xSecret, rawBody)
+                                    if (result != null) String(result.second, Charsets.UTF_8) else rawBody
+                                } else rawBody
+                            } catch (_: Exception) { rawBody }
+                        } else {
+                            rawBody
                         }
 
                         val existing = try { db.messages().getByMsgId(msgId) } catch (_: Exception) { null }
@@ -135,8 +154,14 @@ class MessageForegroundService : Service() {
                         }
 
                         scope.launch {
-                            storeMessage(db, sender, sender, senderName, body, msgId)
-                            showNewMessageNotification(senderName.ifEmpty { senderEmail }, body, sender)
+                            val contact = try { db.contacts().get(sender) } catch (_: Exception) { null }
+                            val resolvedName = contact?.userId?.ifEmpty { null }
+                                ?: contact?.callsign?.ifEmpty { null }
+                                ?: contact?.displayName?.ifEmpty { null }
+                                ?: senderName.ifEmpty { senderEmail.substringBefore("@") }
+                                ?: sender.take(8)
+                            storeMessage(db, sender, sender, resolvedName, body, msgId)
+                            showNewMessageNotification(resolvedName, body, sender)
                         }
                         doc.reference.delete()
                     }

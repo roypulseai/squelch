@@ -124,10 +124,13 @@ fun ConversationScreen(
     val userInfoSheetState = rememberModalBottomSheetState()
     var isRecipientBlocked by remember { mutableStateOf(false) }
     var isRecipientContact by remember { mutableStateOf(false) }
+    var isEncrypted by remember { mutableStateOf(true) }
 
     LaunchedEffect(conversationId) {
         isRecipientBlocked = viewModel.isBlocked(conversationId)
         isRecipientContact = viewModel.isContact(conversationId)
+        isEncrypted = viewModel.hasEncryption(conversationId)
+        viewModel.markConversationRead(conversationId)
     }
 
     var showActionsFor by remember { mutableStateOf<MessageEntity?>(null) }
@@ -348,6 +351,23 @@ fun ConversationScreen(
                 state = listState,
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 4.dp)
             ) {
+                item(key = "encryption_status") {
+                    if (!isGroup) {
+                        val icon = if (isEncrypted) "🔒" else "⚠️"
+                        val text = if (isEncrypted) "Messages are end-to-end encrypted" else "Messages are not encrypted"
+                        val color = if (isEncrypted) MaterialTheme.colorScheme.primary.copy(alpha = 0.7f) else MaterialTheme.colorScheme.error.copy(alpha = 0.8f)
+                        androidx.compose.foundation.layout.Box(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+                            contentAlignment = androidx.compose.ui.Alignment.Center
+                        ) {
+                            Text(
+                                text = "$icon $text",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = color
+                            )
+                        }
+                    }
+                }
                 itemsIndexed(filteredMessages, key = { _, msg -> msg.msgId }) { index, msg ->
                     val isSelf = msg.direction == 1
                     val prevMsg = filteredMessages.getOrNull(index - 1)

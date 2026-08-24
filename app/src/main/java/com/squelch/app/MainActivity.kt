@@ -23,6 +23,9 @@ import com.squelch.app.translate.ModelPreloader
 import com.squelch.app.ui.navigation.AppEntry
 import com.squelch.app.ui.theme.SquelchTheme
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -30,8 +33,19 @@ class MainActivity : FragmentActivity() {
 
     companion object {
         private const val TAG = "MainActivity"
-        var pendingConversationId: String? = null
-            private set
+        private val _pendingConversationId = MutableStateFlow<String?>(null)
+        val pendingConversationId: StateFlow<String?> = _pendingConversationId.asStateFlow()
+
+        private val _pendingMarkRead = MutableStateFlow<String?>(null)
+        val pendingMarkRead: StateFlow<String?> = _pendingMarkRead.asStateFlow()
+
+        fun consumePendingConversationId() {
+            _pendingConversationId.value = null
+        }
+
+        fun consumePendingMarkRead() {
+            _pendingMarkRead.value = null
+        }
     }
 
     @Inject lateinit var authRepository: AuthRepository
@@ -94,8 +108,13 @@ class MainActivity : FragmentActivity() {
     private fun handleIntent(intent: Intent?) {
         val conversationId = intent?.getStringExtra("conversationId")
         if (conversationId != null) {
-            pendingConversationId = conversationId
+            _pendingConversationId.value = conversationId
             Log.d(TAG, "Deep link to conversation: $conversationId")
+        }
+        val markRead = intent?.getBooleanExtra("markRead", false) ?: false
+        if (markRead && conversationId != null) {
+            _pendingMarkRead.value = conversationId
+            Log.d(TAG, "Mark read for: $conversationId")
         }
     }
 }

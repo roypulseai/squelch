@@ -172,20 +172,26 @@ class MessageRelay @Inject constructor(
         }
     }
 
+    private val xPubCache = java.util.concurrent.ConcurrentHashMap<String, String>()
+
     private suspend fun encryptPayload(
         identity: Identity,
         recipientEdPubHex: String,
         recipientUid: String,
         plaintext: ByteArray
     ): ByteArray {
-        var recipientXPub: String? = null
-        val db = database
-        if (db != null) {
-            try {
-                val contact = db.contacts().get(recipientEdPubHex)
-                recipientXPub = contact?.xPub?.ifEmpty { null }
-            } catch (_: Exception) {}
+        var recipientXPub: String? = xPubCache[recipientEdPubHex]
+
+        if (recipientXPub == null) {
+            val db = database
+            if (db != null) {
+                try {
+                    val contact = db.contacts().get(recipientEdPubHex)
+                    recipientXPub = contact?.xPub?.ifEmpty { null }
+                } catch (_: Exception) {}
+            }
         }
+
         if (recipientXPub == null && recipientUid.isNotEmpty()) {
             try {
                 val doc = FirebaseFirestore.getInstance()
@@ -196,7 +202,9 @@ class MessageRelay @Inject constructor(
                 recipientXPub = doc.getString("xPub")
             } catch (_: Exception) {}
         }
-        if (recipientXPub != null && recipientXPub!!.isNotEmpty()) {
+
+        if (recipientXPub != null) {
+            xPubCache[recipientEdPubHex] = recipientXPub!!
             return try {
                 val envelope = E2ECrypto.encryptFor(identity, recipientXPub, plaintext)
                 envelope.toByteArray(Charsets.UTF_8)
@@ -292,6 +300,15 @@ class MessageRelay @Inject constructor(
                 if (targetMsgId.isNotEmpty()) {
                     db.messages().updateDelivery(targetMsgId, 2)
                     Log.d(TAG, "Delivery ack for $targetMsgId from $senderEdPubHex")
+                }
+                return
+            }
+
+            if (command == "read") {
+                val targetMsgId = json.optString("msgId", "")
+                if (targetMsgId.isNotEmpty()) {
+                    db.messages().updateDelivery(targetMsgId, 3)
+                    Log.d(TAG, "Read receipt for $targetMsgId from $senderEdPubHex")
                 }
                 return
             }

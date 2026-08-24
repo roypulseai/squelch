@@ -479,6 +479,35 @@ class ChatViewModel @Inject constructor(
         }
     }
 
+    fun markConversationRead(conversationId: String) {
+        viewModelScope.launch {
+            val db = vaultRepository.db ?: return@launch
+            try {
+                db.conversations()?.clearUnread(conversationId)
+                val unread = db.messages().lastN(conversationId, 50)
+                    .filter { it.direction == 0 && it.readAt == null }
+                for (msg in unread) {
+                    db.messages().markRead(msg.msgId, System.currentTimeMillis())
+                    val contact = try { db.contacts().get(conversationId) } catch (_: Exception) { null }
+                    val recipientUid = contact?.firebaseUid ?: ""
+                    if (recipientUid.isNotEmpty() && messageRelay.isRunning) {
+                        val ackCmd = org.json.JSONObject().apply {
+                            put("cmd", "read")
+                            put("msgId", msg.msgId)
+                        }
+                        messageRelay.sendCommand(
+                            recipientEdPubHex = conversationId,
+                            recipientUid = recipientUid,
+                            senderName = "",
+                            kind = com.squelch.app.mesh.transport.Transport.TransportFrame.KIND_DATA,
+                            payloadBytes = ackCmd.toString().toByteArray(Charsets.UTF_8)
+                        )
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+    }
+
     fun clearGroupUnread(groupId: String) {
         viewModelScope.launch {
             vaultRepository.db?.groups()?.clearUnread(groupId)
@@ -718,5 +747,15 @@ class ChatViewModel @Inject constructor(
     fun getSelfName(): String {
         val selfEmail = messageRelay.selfEmail
         return selfEmail.substringBefore("@").ifEmpty { messageRelay.selfEdPubHex.take(8) }
+    }
+
+    fun hasEncryption(recipientPubkey: String): Boolean {
+        val db = vaultRepository.db ?: return false
+        return try {
+            kotlinx.coroutines.runBlocking {
+                val contact = db.contacts().get(recipientPubkey)
+                !contact?.xPub.isNullOrEmpty()
+            }
+        } catch (_: Exception) { false }
     }
 }

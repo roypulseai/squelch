@@ -30,6 +30,9 @@ interface MessageDao {
     @Query("UPDATE messages SET readAt = :readAt WHERE msgId = :msgId")
     suspend fun markRead(msgId: String, readAt: Long)
 
+    @Query("UPDATE messages SET readAt = :readAt WHERE conversationId = :conversationId AND readAt = 0")
+    suspend fun markAllRead(conversationId: String, readAt: Long)
+
     @Query("DELETE FROM messages WHERE msgId = :msgId")
     suspend fun delete(msgId: String): Int
 
