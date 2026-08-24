@@ -285,8 +285,11 @@ class RadarViewModel @Inject constructor(
         _bleEnabled.value = !_bleEnabled.value
         updateTransportStatus()
 
-        if (!_bleEnabled.value) {
-            _peers.value = _peers.value.filter { it.transport != "BLE" }
+        if (_bleEnabled.value) {
+            meshEngineManager.getOrCreate()
+        } else {
+            meshEngineManager.stop()
+            _peers.value = emptyList()
             updateStats()
         }
     }
@@ -294,7 +297,10 @@ class RadarViewModel @Inject constructor(
     fun scanNow() {
         _isScanning.value = true
         viewModelScope.launch {
-            delay(3000)
+            meshEngineManager.stop()
+            delay(500)
+            meshEngineManager.getOrCreate()
+            delay(2500)
             _isScanning.value = false
             updateStats()
         }

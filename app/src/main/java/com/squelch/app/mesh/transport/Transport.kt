@@ -6,7 +6,7 @@ interface Transport {
     val name: String
     fun start()
     fun stop()
-    fun send(recipientEdPubHex: String, payload: ByteArray)
+    fun send(recipientEdPubHex: String, payload: ByteArray, kind: Int = TransportFrame.KIND_DATA)
     val incoming: Flow<TransportFrame>
 
     data class TransportFrame(

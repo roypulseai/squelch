@@ -108,7 +108,7 @@ class FirestoreTransport(
         Log.d(TAG, "Firestore transport stopped")
     }
 
-    override fun send(recipientEdPubHex: String, payload: ByteArray) {
+    override fun send(recipientEdPubHex: String, payload: ByteArray, kind: Int) {
         val fireDb = db ?: run {
             Log.e(TAG, "Cannot send: Firestore not initialized")
             return
@@ -118,7 +118,7 @@ class FirestoreTransport(
             "recipient" to recipientEdPubHex,
             "payload" to Base64.encodeToString(payload, Base64.NO_WRAP),
             "timestamp" to com.google.firebase.Timestamp.now(),
-            "kind" to Transport.TransportFrame.KIND_DATA
+            "kind" to kind
         )
         Log.d(TAG, "Sending to $recipientEdPubHex (${payload.size} bytes)")
         fireDb.collection(COLLECTION)

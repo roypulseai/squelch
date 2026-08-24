@@ -32,7 +32,7 @@ class BleTransport(
         private const val HEADER_SIZE = 37
         private const val MAX_CHUNK = MAX_MTU - HEADER_SIZE
         private const val MAX_CONNECTIONS = 8
-        private const val WRITE_TIMEOUT_MS = 500L
+        private const val WRITE_TIMEOUT_MS = 3_000L
         private const val SCAN_WINDOW_MS = 10_000L
         private const val SCAN_PAUSE_MS = 5_000L
         private const val ADVERTISE_RETRY_MS = 30_000L
@@ -54,22 +54,17 @@ class BleTransport(
     @Volatile private var running = false
     private var scope: CoroutineScope? = null
 
-    // Pubkey mapping
     private val devicePubkeys = ConcurrentHashMap<String, String>()
     private val pubkeyDevices = ConcurrentHashMap<String, String>()
 
-    // GATT write queue — only one write at a time
     private val writeQueue = ConcurrentLinkedQueue<WriteJob>()
     @Volatile private var isWriting = false
 
-    // Connection management
     private val activeConnections = AtomicInteger(0)
     private val pendingConnections = ConcurrentHashMap<String, Boolean>()
 
-    // Fragment reassembly
     private val fragmentBuffers = ConcurrentHashMap<String, FragmentBuffer>()
 
-    // Duplicate detection (seen-set with LRU)
     private val seenMessages = object : LinkedHashMap<String, Long>(SEEN_SET_SIZE, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Long>?): Boolean {
             return size > SEEN_SET_SIZE
@@ -77,10 +72,8 @@ class BleTransport(
     }
     private val seenMessagesLock = Any()
 
-    // Store-and-forward
     private val pendingMessages = ConcurrentHashMap<String, MutableList<PendingMessage>>()
 
-    // Scan/advertise watchdog
     private var scanWatchdogJob: Job? = null
     private var advertiseRetryJob: Job? = null
 
@@ -93,6 +86,7 @@ class BleTransport(
     private data class WriteJob(
         val deviceAddress: String,
         val data: ByteArray,
+        val kind: Int,
         val onResult: (Boolean) -> Unit
     )
 
@@ -106,6 +100,7 @@ class BleTransport(
     private data class PendingMessage(
         val recipientPubHex: String,
         val data: ByteArray,
+        val kind: Int,
         val timestamp: Long = System.currentTimeMillis()
     )
 
@@ -118,9 +113,9 @@ class BleTransport(
         }
         scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         running = true
+        startGattServer()
         startAdvertising()
         startScanning()
-        startGattServer()
         startScanWatchdog()
         startAdvertiseRetry()
         Log.d(TAG, "BLE transport started, pubkey=${selfEdPubHex.take(16)}...")
@@ -146,26 +141,33 @@ class BleTransport(
         Log.d(TAG, "BLE transport stopped")
     }
 
-    override fun send(recipientEdPubHex: String, payload: ByteArray) {
+    override fun send(recipientEdPubHex: String, payload: ByteArray, kind: Int) {
         if (!running) return
+
+        if (recipientEdPubHex.isEmpty()) {
+            for ((addr, _) in pubkeyDevices) {
+                enqueueWrite(addr, payload, kind)
+            }
+            return
+        }
+
         val deviceAddress = pubkeyDevices[recipientEdPubHex]
         if (deviceAddress == null) {
-            // Store for later delivery
             pendingMessages.getOrPut(recipientEdPubHex) { mutableListOf() }
-                .add(PendingMessage(recipientEdPubHex, payload))
+                .add(PendingMessage(recipientEdPubHex, payload, kind))
             Log.d(TAG, "Queued message for offline peer ${recipientEdPubHex.take(16)}")
             return
         }
-        enqueueWrite(deviceAddress, payload)
+        enqueueWrite(deviceAddress, payload, kind)
     }
 
-    private fun enqueueWrite(deviceAddress: String, payload: ByteArray) {
-        writeQueue.offer(WriteJob(deviceAddress, payload) { success ->
+    private fun enqueueWrite(deviceAddress: String, payload: ByteArray, kind: Int) {
+        writeQueue.offer(WriteJob(deviceAddress, payload, kind) { success ->
             if (!success) {
-                Log.w(TAG, "Write failed for $deviceAddress, retrying in 1s")
+                Log.w(TAG, "Write failed for $deviceAddress, retrying in 2s")
                 scope?.launch {
-                    delay(1000)
-                    if (running) enqueueWrite(deviceAddress, payload)
+                    delay(2000)
+                    if (running) enqueueWrite(deviceAddress, payload, kind)
                 }
             }
         })
@@ -200,6 +202,7 @@ class BleTransport(
 
         val device = bluetoothAdapter?.getRemoteDevice(job.deviceAddress) ?: return
         val connected = CompletableDeferred<Boolean>()
+        val writeResult = CompletableDeferred<Boolean>()
 
         val gatt = device.connectGatt(context, false, object : BluetoothGattCallback() {
             override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) {
@@ -222,13 +225,18 @@ class BleTransport(
                     connected.complete(false)
                     return
                 }
+                try { g.requestMtu(MAX_MTU) } catch (_: Exception) {}
                 connected.complete(true)
             }
-        })
 
-        try {
-            gatt?.requestMtu(MAX_MTU)
-        } catch (_: Exception) {}
+            override fun onMtuChanged(g: BluetoothGatt, mtu: Int, status: Int) {
+                Log.d(TAG, "MTU negotiated: $mtu")
+            }
+
+            override fun onCharacteristicWrite(g: BluetoothGatt, c: BluetoothGattCharacteristic, status: Int) {
+                writeResult.complete(status == BluetoothGatt.GATT_SUCCESS)
+            }
+        })
 
         val ready = withTimeoutOrNull(WRITE_TIMEOUT_MS) { connected.await() } ?: false
         if (!ready) {
@@ -246,29 +254,22 @@ class BleTransport(
         }
 
         val payload = job.data
-        val chunks = fragmentPayload(payload)
+        val chunks = fragmentPayload(payload, job.kind)
 
         for (chunk in chunks) {
-            val writeCompleted = CompletableDeferred<Boolean>()
             msgChar.value = chunk
             msgChar.writeType = BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
 
-            val callback = object : BluetoothGattCallback() {
-                override fun onCharacteristicWrite(g: BluetoothGatt, c: BluetoothGattCharacteristic, status: Int) {
-                    writeCompleted.complete(status == BluetoothGatt.GATT_SUCCESS)
-                }
-            }
-
             try {
                 gatt?.writeCharacteristic(msgChar)
-                val result = withTimeoutOrNull(WRITE_TIMEOUT_MS) { writeCompleted.await() } ?: false
+                val result = withTimeoutOrNull(WRITE_TIMEOUT_MS) { writeResult.await() } ?: false
                 if (!result) {
                     Log.e(TAG, "Chunk write failed")
                     job.onResult(false)
                     try { gatt?.disconnect() } catch (_: Exception) {}
                     return
                 }
-                delay(20) // Inter-chunk delay
+                delay(20)
             } catch (e: Exception) {
                 Log.e(TAG, "Write exception: ${e.message}")
                 job.onResult(false)
@@ -282,9 +283,9 @@ class BleTransport(
         Log.d(TAG, "Sent ${payload.size} bytes in ${chunks.size} chunks to ${job.deviceAddress}")
     }
 
-    private fun fragmentPayload(payload: ByteArray): List<ByteArray> {
+    private fun fragmentPayload(payload: ByteArray, kind: Int): List<ByteArray> {
         if (payload.size <= MAX_CHUNK) {
-            return listOf(buildFrame(payload, 1, 0))
+            return listOf(buildFrame(payload, 1, 0, kind))
         }
 
         val chunks = mutableListOf<ByteArray>()
@@ -295,17 +296,17 @@ class BleTransport(
         while (offset < payload.size) {
             val size = minOf(MAX_CHUNK, payload.size - offset)
             val chunk = payload.copyOfRange(offset, offset + size)
-            chunks.add(buildFrame(chunk, total, index))
+            chunks.add(buildFrame(chunk, total, index, kind))
             offset += size
             index++
         }
         return chunks
     }
 
-    private fun buildFrame(chunk: ByteArray, totalChunks: Int, index: Int): ByteArray {
+    private fun buildFrame(chunk: ByteArray, totalChunks: Int, index: Int, kind: Int): ByteArray {
         val frame = ByteArray(HEADER_SIZE + chunk.size)
         System.arraycopy(selfEdPub, 0, frame, 0, 32)
-        frame[32] = Transport.TransportFrame.KIND_DATA.toByte()
+        frame[32] = kind.toByte()
         frame[33] = (totalChunks and 0xFF).toByte()
         frame[34] = ((totalChunks shr 8) and 0xFF).toByte()
         frame[35] = (index and 0xFF).toByte()
@@ -346,6 +347,7 @@ class BleTransport(
             }
             override fun onStartFailure(errorCode: Int) {
                 Log.e(TAG, "Advertising failed: $errorCode")
+                advertiseCallback = null
             }
         }
         try {
@@ -416,7 +418,6 @@ class BleTransport(
             while (running) {
                 delay(SCAN_WINDOW_MS)
                 if (!running) break
-                // Restart scan to prevent stale state
                 stopScanning()
                 delay(SCAN_PAUSE_MS)
                 if (running) startScanning()
@@ -463,6 +464,7 @@ class BleTransport(
                         }
                         BluetoothProfile.STATE_DISCONNECTED -> {
                             if (activeConnections.get() > 0) activeConnections.decrementAndGet()
+                            pendingConnections.remove(deviceAddress)
                             try { g.close() } catch (_: Exception) {}
                         }
                     }
@@ -473,12 +475,17 @@ class BleTransport(
                         try { g.disconnect() } catch (_: Exception) {}
                         return
                     }
+                    try { g.requestMtu(MAX_MTU) } catch (_: Exception) {}
                     val char = g.getService(SERVICE_UUID)?.getCharacteristic(PUBKEY_CHAR_UUID)
                     if (char != null) {
                         try { g.readCharacteristic(char) } catch (_: Exception) {}
                     } else {
                         try { g.disconnect() } catch (_: Exception) {}
                     }
+                }
+
+                override fun onMtuChanged(g: BluetoothGatt, mtu: Int, status: Int) {
+                    Log.d(TAG, "MTU negotiated: $mtu")
                 }
 
                 override fun onCharacteristicRead(
@@ -504,12 +511,10 @@ class BleTransport(
                     try { g.disconnect() } catch (_: Exception) {}
                 }
             })
-            gatt?.requestMtu(MAX_MTU)
         } catch (e: Exception) {
             Log.e(TAG, "Pubkey exchange failed: ${e.message}")
-            try { gatt?.close() } catch (_: Exception) {}
-        } finally {
             pendingConnections.remove(deviceAddress)
+            try { gatt?.close() } catch (_: Exception) {}
         }
     }
 
@@ -522,7 +527,7 @@ class BleTransport(
         for (msg in pending) {
             if (now - msg.timestamp < STORE_FORWARD_TTL_MS) {
                 Log.d(TAG, "Delivering stored message to ${peerPubHex.take(16)}")
-                enqueueWrite(deviceAddress, msg.data)
+                enqueueWrite(deviceAddress, msg.data, msg.kind)
             }
         }
     }
@@ -534,6 +539,10 @@ class BleTransport(
         val btManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager ?: return
         try {
             gattServer = btManager.openGattServer(context, gattServerCallback)
+            if (gattServer == null) {
+                Log.e(TAG, "GATT server is null — openGattServer returned null")
+                return
+            }
             val service = BluetoothGattService(SERVICE_UUID, BluetoothGattService.SERVICE_TYPE_PRIMARY)
             val pubkeyChar = BluetoothGattCharacteristic(
                 PUBKEY_CHAR_UUID,
@@ -550,8 +559,12 @@ class BleTransport(
             )
             service.addCharacteristic(msgChar)
 
-            gattServer?.addService(service)
-            Log.d(TAG, "GATT server started")
+            val added = gattServer?.addService(service)
+            if (added != true) {
+                Log.e(TAG, "GATT addService failed")
+            } else {
+                Log.d(TAG, "GATT server started")
+            }
         } catch (e: Exception) {
             Log.e(TAG, "GATT server start failed: ${e.message}")
         }
@@ -585,12 +598,13 @@ class BleTransport(
             devicePubkeys[device.address] = senderPubHex
             pubkeyDevices[senderPubHex] = device.address
 
+            val kind = value[32].toInt() and 0xFF
             val totalChunks = ((value[33].toInt() and 0xFF)) or ((value[34].toInt() and 0xFF) shl 8)
             val chunkIndex = ((value[35].toInt() and 0xFF)) or ((value[36].toInt() and 0xFF) shl 8)
             val chunkData = value.copyOfRange(HEADER_SIZE, value.size)
 
-            // Duplicate detection
-            val msgId = "${senderPubHex}_${totalChunks}_${chunkIndex}"
+            val contentHash = MessageDigest.getInstance("SHA-256").digest(chunkData).copyOfRange(0, 8)
+            val msgId = "${senderPubHex}_${Bytes.hex(contentHash)}"
             synchronized(seenMessagesLock) {
                 if (seenMessages.containsKey(msgId)) {
                     if (responseNeeded) {
@@ -605,12 +619,12 @@ class BleTransport(
                 _incoming.tryEmit(
                     Transport.TransportFrame(
                         senderEdPubHex = senderPubHex,
-                        kind = Transport.TransportFrame.KIND_DATA,
+                        kind = kind,
                         payload = chunkData
                     )
                 )
             } else {
-                val key = "${senderPubHex}_$totalChunks"
+                val key = "${senderPubHex}_${totalChunks}"
                 val buffer = fragmentBuffers.getOrPut(key) { FragmentBuffer() }
                 buffer.expectedCount = totalChunks
                 buffer.fragments[chunkIndex] = chunkData
@@ -623,7 +637,7 @@ class BleTransport(
                         _incoming.tryEmit(
                             Transport.TransportFrame(
                                 senderEdPubHex = senderPubHex,
-                                kind = Transport.TransportFrame.KIND_DATA,
+                                kind = kind,
                                 payload = assembled
                             )
                         )
@@ -631,7 +645,6 @@ class BleTransport(
                     }
                 }
 
-                // Cleanup stale fragments (30s)
                 if (System.currentTimeMillis() - buffer.timestamp > 30_000) {
                     fragmentBuffers.remove(key)
                 }
@@ -655,6 +668,5 @@ class BleTransport(
                 } catch (_: Exception) {}
             }
         }
-
     }
 }

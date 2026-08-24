@@ -191,7 +191,7 @@ class MeshEngine(
         val hsMsg = session.writeHandshake()
         val wrapped = wrapHandshakeMessage(remotePubHex, hsMsg)
         for (transport in transports) {
-            try { transport.send(remotePubHex, wrapped) } catch (_: Exception) {}
+            try { transport.send(remotePubHex, wrapped, Transport.TransportFrame.KIND_HS) } catch (_: Exception) {}
         }
     }
 
@@ -213,7 +213,7 @@ class MeshEngine(
                 val response = session.writeHandshake()
                 val wrapped = wrapHandshakeMessage(sender, response)
                 for (transport in transports) {
-                    try { transport.send(sender, wrapped) } catch (_: Exception) {}
+                    try { transport.send(sender, wrapped, Transport.TransportFrame.KIND_HS) } catch (_: Exception) {}
                 }
             }
             Log.d(TAG, "Handshake complete with $sender")
@@ -295,12 +295,9 @@ class MeshEngine(
     }
 
     private fun broadcastPresence() {
-        val presenceData = "{\"typing\":false}".toByteArray(Charsets.UTF_8)
-        for (transport in transports) {
-            try {
-                transport.send("", presenceData)
-            } catch (_: Exception) {}
-        }
+        // Presence is tracked passively via transport discovery (BLE scan/advertise).
+        // No need to send a broadcast frame — it would just queue into pendingMessages[""]
+        // and grow unboundedly since no device maps to empty recipient.
     }
 
     private fun pruneStalePeers() {
