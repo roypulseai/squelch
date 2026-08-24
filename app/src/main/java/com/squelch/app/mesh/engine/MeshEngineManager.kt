@@ -10,7 +10,6 @@ import com.squelch.app.data.local.entity.MessageEntity
 import com.squelch.app.data.repository.VaultRepository
 import com.squelch.app.mesh.transport.BleTransport
 import com.squelch.app.mesh.transport.Transport
-import com.squelch.app.mesh.transport.WifiDirectTransport
 import com.squelch.app.util.Notifications
 import com.squelch.app.util.toHex
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -52,7 +51,6 @@ class MeshEngineManager @Inject constructor(
 
             val transports = mutableListOf<Transport>()
             transports.add(BleTransport(context, edPubHex))
-            transports.add(WifiDirectTransport(context, edPubHex))
 
             val eng = MeshEngine(identity = identity, transports = transports)
             eng.start()

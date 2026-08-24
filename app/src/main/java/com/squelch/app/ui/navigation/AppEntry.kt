@@ -111,12 +111,12 @@ fun AppEntry(
 
     var preferredLang by remember { mutableStateOf("en") }
     var showTranslation by remember { mutableStateOf(false) }
-    val modelDownloadProgress by androidx.compose.runtime.produceState(modelPreloader.progress) {
-        while (true) {
-            value = modelPreloader.progress
-            kotlinx.coroutines.delay(1000)
-        }
-    }
+    val modelDownloadProgress by modelPreloader.progress.collectAsState()
+    val isDownloadingModels by modelPreloader.isDownloading.collectAsState()
+    val isPausedModels by modelPreloader.isPaused.collectAsState()
+    val modelStatusText by modelPreloader.statusText.collectAsState()
+    val modelFailedModels by modelPreloader.failedModels.collectAsState()
+    val modelCurrentModel by modelPreloader.currentModel.collectAsState()
 
     LaunchedEffect(vaultState) {
         if (vaultState is VaultState.Unlocked) {
@@ -204,7 +204,7 @@ fun AppEntry(
                             .putExtra("edPubHex", edPubHex)
                             .also { activity.startForegroundService(it) }
                     }
-                    if (!modelPreloader.isDownloading && modelPreloader.progress < 1f) {
+                    if (!modelPreloader.isDownloading.value && modelPreloader.progress.value < 1f) {
                         scope.launch {
                             modelPreloader.preloadAllModels()
                         }
@@ -749,7 +749,11 @@ fun AppEntry(
                         preferredLanguage = preferredLang,
                         showTranslation = showTranslation,
                         modelDownloadProgress = modelDownloadProgress,
-                        isDownloadingModels = modelPreloader.isDownloading,
+                        isDownloadingModels = isDownloadingModels,
+                        isPausedModels = isPausedModels,
+                        modelStatusText = modelStatusText,
+                        modelFailedCount = modelFailedModels.size,
+                        modelCurrentModel = modelCurrentModel,
                         onNavigateToProfile = { navController.navigate(Screen.Profile.route) },
                         onNavigateToBlockedUsers = { navController.navigate(Screen.BlockedUsers.route) },
                         onNavigateToPermissions = { navController.navigate(Screen.Permissions.route) },
@@ -802,6 +806,13 @@ fun AppEntry(
                                 val db = vaultRepository.db
                                 db?.settings()?.put(SettingEntity(key = "show_translation", value = showTranslation.toString()))
                             }
+                        },
+                        onPauseModelDownload = {
+                            if (modelPreloader.isPaused.value) modelPreloader.resume() else modelPreloader.pause()
+                        },
+                        onRefreshModelDownload = {
+                            modelPreloader.refresh()
+                            scope.launch { modelPreloader.preloadAllModels() }
                         }
                     )
                 }

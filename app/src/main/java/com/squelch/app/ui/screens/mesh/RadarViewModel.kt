@@ -3,7 +3,6 @@ package com.squelch.app.ui.screens.mesh
 import android.annotation.SuppressLint
 import android.app.Application
 import android.bluetooth.BluetoothManager
-import android.net.wifi.WifiManager
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -14,7 +13,6 @@ import com.squelch.app.data.local.entity.ContactEntity
 import com.squelch.app.data.repository.VaultRepository
 import com.squelch.app.mesh.engine.MeshEngine
 import com.squelch.app.mesh.engine.MeshEngineManager
-import com.squelch.app.mesh.transport.WifiDirectManager
 import com.squelch.app.util.toHex
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
@@ -74,13 +72,10 @@ class RadarViewModel @Inject constructor(
     data class NetworkStats(
         val totalPeers: Int,
         val blePeers: Int,
-        val wifiDirectPeers: Int,
         val internetRelay: Boolean,
         val uptimeMs: Long,
         val messagesRelayed: Int
     )
-
-    private val wifiDirectManager = WifiDirectManager(application)
 
     private val _transports = MutableStateFlow<List<TransportStatus>>(emptyList())
     val transports: StateFlow<List<TransportStatus>> = _transports.asStateFlow()
@@ -88,7 +83,7 @@ class RadarViewModel @Inject constructor(
     private val _peers = MutableStateFlow<List<PeerInfo>>(emptyList())
     val peers: StateFlow<List<PeerInfo>> = _peers.asStateFlow()
 
-    private val _stats = MutableStateFlow(NetworkStats(0, 0, 0, false, 0, 0))
+    private val _stats = MutableStateFlow(NetworkStats(0, 0, false, 0, 0))
     val stats: StateFlow<NetworkStats> = _stats.asStateFlow()
 
     private val _selfPubkey = MutableStateFlow("")
@@ -100,9 +95,6 @@ class RadarViewModel @Inject constructor(
     private val _bleEnabled = MutableStateFlow(true)
     val bleEnabled: StateFlow<Boolean> = _bleEnabled.asStateFlow()
 
-    private val _wifiDirectEnabled = MutableStateFlow(true)
-    val wifiDirectEnabled: StateFlow<Boolean> = _wifiDirectEnabled.asStateFlow()
-
     private val _squelchUsers = MutableStateFlow<List<SquelchUser>>(emptyList())
     val squelchUsers: StateFlow<List<SquelchUser>> = _squelchUsers.asStateFlow()
 
@@ -113,18 +105,10 @@ class RadarViewModel @Inject constructor(
         startTime = System.currentTimeMillis()
         initSelfPubkey()
         meshEngineManager.getOrCreate()
-        wifiDirectManager.start()
 
         observePeerChanges()
         startTransportPolling()
         loadSquelchUsers()
-
-        viewModelScope.launch {
-            delay(2000)
-            if (_wifiDirectEnabled.value) {
-                wifiDirectManager.discoverPeers()
-            }
-        }
     }
 
     private fun initSelfPubkey() {
@@ -185,16 +169,14 @@ class RadarViewModel @Inject constructor(
             while (isActive) {
                 val engine = meshEngine
                 val blePeers = engine?.peers?.value ?: emptySet()
-                val wifiPeers = wifiDirectManager.peers.value
-                rebuildPeerList(blePeers, wifiPeers)
+                rebuildPeerList(blePeers)
                 delay(2000)
             }
         }
     }
 
     private suspend fun rebuildPeerList(
-        blePeers: Set<String>,
-        wifiPeers: List<WifiDirectManager.WifiDirectPeer>
+        blePeers: Set<String>
     ) {
         val db = vaultRepository.db
         val contactPubkeys = try {
@@ -234,23 +216,6 @@ class RadarViewModel @Inject constructor(
             }
         }
 
-        if (_wifiDirectEnabled.value) {
-            for (peer in wifiPeers) {
-                if (!seen.add(peer.deviceAddress)) continue
-                peerList.add(
-                    PeerInfo(
-                        id = peer.deviceAddress,
-                        name = peer.deviceName,
-                        transport = "Wi-Fi Direct",
-                        signalStrength = if (peer.status == "Connected") 95 else 50,
-                        lastSeen = System.currentTimeMillis(),
-                        isContact = false,
-                        isSquelchUser = false
-                    )
-                )
-            }
-        }
-
         _peers.value = peerList
     }
 
@@ -270,10 +235,6 @@ class RadarViewModel @Inject constructor(
 
         val btManager = ctx.getSystemService(android.content.Context.BLUETOOTH_SERVICE) as? BluetoothManager
         val btEnabled = btManager?.adapter?.isEnabled == true
-
-        val wifiManager = ctx.applicationContext.getSystemService(android.content.Context.WIFI_SERVICE) as? WifiManager
-        @Suppress("DEPRECATION")
-        val wifiEnabled = wifiManager?.isWifiEnabled == true
 
         val transports = mutableListOf<TransportStatus>()
 
@@ -303,22 +264,6 @@ class RadarViewModel @Inject constructor(
             )
         )
 
-        val wifiDirectEnabled = wifiDirectManager.isEnabled.value
-        val wdActive = _wifiDirectEnabled.value && wifiDirectEnabled
-        transports.add(
-            TransportStatus(
-                name = "Wi-Fi Direct",
-                icon = "\uD83D\uDCF6",
-                isEnabled = wdActive,
-                isActive = wdActive,
-                peerCount = if (wdActive) _peers.value.count { it.transport == "Wi-Fi Direct" } else 0,
-                description = if (!wifiEnabled) "Wi-Fi is off"
-                    else if (!wifiDirectEnabled) "Wi-Fi P2P not supported"
-                    else if (!_wifiDirectEnabled.value) "Disabled by user"
-                    else "High-speed local transfer"
-            )
-        )
-
         _transports.value = transports
     }
 
@@ -327,7 +272,6 @@ class RadarViewModel @Inject constructor(
         _stats.value = NetworkStats(
             totalPeers = currentPeers.size,
             blePeers = currentPeers.count { it.transport == "BLE" },
-            wifiDirectPeers = currentPeers.count { it.transport == "Wi-Fi Direct" },
             internetRelay = meshEngine != null,
             uptimeMs = System.currentTimeMillis() - startTime,
             messagesRelayed = messageCount
@@ -344,25 +288,9 @@ class RadarViewModel @Inject constructor(
         }
     }
 
-    fun toggleWifiDirect() {
-        _wifiDirectEnabled.value = !_wifiDirectEnabled.value
-
-        if (_wifiDirectEnabled.value) {
-            wifiDirectManager.discoverPeers()
-        } else {
-            _peers.value = _peers.value.filter { it.transport != "Wi-Fi Direct" }
-            updateStats()
-        }
-
-        updateTransportStatus()
-    }
-
     fun scanNow() {
         _isScanning.value = true
         viewModelScope.launch {
-            if (_wifiDirectEnabled.value) {
-                wifiDirectManager.discoverPeers()
-            }
             delay(3000)
             _isScanning.value = false
             updateStats()
@@ -376,5 +304,5 @@ class RadarViewModel @Inject constructor(
 
     override fun onCleared() {
         super.onCleared()
-        wifiDirectManager.stop()
-    }}
+    }
+}

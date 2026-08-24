@@ -989,11 +989,13 @@ private fun MessageBubble(
             isTranslating = true
             try {
                 val result = withContext(Dispatchers.IO) {
-                    com.squelch.app.translate.TranslationManager.translateIfNeeded(
-                        msg.body, preferredLang
-                    )
+                    kotlinx.coroutines.withTimeoutOrNull(25_000L) {
+                        com.squelch.app.translate.TranslationManager.translateIfNeeded(
+                            msg.body, preferredLang
+                        )
+                    }
                 }
-                if (result.translated != null && result.translated != msg.body) {
+                if (result != null && result.translated != null && result.translated != msg.body) {
                     displayText = result.translated
                 }
                 hasTranslated = true

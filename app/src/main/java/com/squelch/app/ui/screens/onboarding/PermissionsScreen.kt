@@ -29,7 +29,6 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -129,15 +128,6 @@ fun PermissionsScreen(
                     description = "Required for Bluetooth scanning on Android 11 and below",
                     icon = Icons.Default.LocationOn,
                     minSdk = 0
-                ))
-            }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                add(PermissionItem(
-                    permission = Manifest.permission.NEARBY_WIFI_DEVICES,
-                    label = "Nearby Wi-Fi",
-                    description = "Discover peers via Wi-Fi Direct",
-                    icon = Icons.Default.Wifi,
-                    minSdk = Build.VERSION_CODES.TIRAMISU
                 ))
             }
         }

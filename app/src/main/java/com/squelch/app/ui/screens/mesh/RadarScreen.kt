@@ -29,8 +29,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.SignalWifi4Bar
-import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -76,7 +74,6 @@ private val RadarGreen = Color(0xFF00A884)
 private val RadarGreenDark = Color(0xFF005C4B)
 private val RadarGreenGlow = Color(0xFF00FF88)
 private val RadarRingColor = Color(0xFF1A3A2A)
-private val WifiBlue = Color(0xFF4A90D9)
 private val BtBlue = Color(0xFF5B8DEF)
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -91,7 +88,6 @@ fun RadarScreen(
     val stats by viewModel.stats.collectAsState()
     val isScanning by viewModel.isScanning.collectAsState()
     val bleEnabled by viewModel.bleEnabled.collectAsState()
-    val wifiDirectEnabled by viewModel.wifiDirectEnabled.collectAsState()
     val selfPubkey by viewModel.selfPubkey.collectAsState()
     val squelchUsers by viewModel.squelchUsers.collectAsState()
 
@@ -155,8 +151,6 @@ fun RadarScreen(
                     transport = transport,
                     onToggle = if (transport.name == "Bluetooth LE") {
                         { viewModel.toggleBle() }
-                    } else if (transport.name == "Wi-Fi Direct") {
-                        { viewModel.toggleWifiDirect() }
                     } else {
                         null
                     }
@@ -547,9 +541,9 @@ private fun NetworkStatsRow(stats: RadarViewModel.NetworkStats) {
             modifier = Modifier.weight(1f)
         )
         StatChip(
-            label = "Wi-Fi",
-            value = "${stats.wifiDirectPeers}",
-            color = WifiBlue,
+            label = "Uptime",
+            value = formatUptime(stats.uptimeMs),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.weight(1f)
         )
     }
@@ -705,20 +699,14 @@ private fun PeerCard(peer: RadarViewModel.PeerInfo, onTap: () -> Unit = {}) {
                 modifier = Modifier
                     .size(40.dp)
                     .clip(CircleShape)
-                    .background(
-                        if (peer.transport == "BLE") BtBlue.copy(alpha = 0.2f)
-                        else WifiBlue.copy(alpha = 0.2f)
-                    ),
+                    .background(BtBlue.copy(alpha = 0.2f)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = when (peer.transport) {
-                        "BLE" -> Icons.Default.Bluetooth
-                        else -> Icons.Default.Wifi
-                    },
+                    imageVector = Icons.Default.Bluetooth,
                     contentDescription = null,
                     modifier = Modifier.size(20.dp),
-                    tint = if (peer.transport == "BLE") BtBlue else WifiBlue
+                    tint = BtBlue
                 )
             }
 
@@ -769,13 +757,13 @@ private fun PeerCard(peer: RadarViewModel.PeerInfo, onTap: () -> Unit = {}) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Surface(
                         shape = RoundedCornerShape(4.dp),
-                        color = if (peer.transport == "BLE") BtBlue.copy(alpha = 0.15f) else WifiBlue.copy(alpha = 0.15f)
+                        color = BtBlue.copy(alpha = 0.15f)
                     ) {
                         Text(
                             text = peer.transport,
                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
                             style = MaterialTheme.typography.labelSmall,
-                            color = if (peer.transport == "BLE") BtBlue else WifiBlue,
+                            color = BtBlue,
                             fontSize = 9.sp,
                             fontWeight = FontWeight.Medium
                         )
@@ -916,7 +904,7 @@ private fun EmptyPeersCard(isScanning: Boolean) {
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = if (isScanning) "Looking for nearby devices"
-                else "Enable Bluetooth and Wi-Fi to discover peers",
+                else "Enable Bluetooth to discover peers",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                 textAlign = TextAlign.Center
