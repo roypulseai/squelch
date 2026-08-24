@@ -66,8 +66,12 @@ object TranslationManager {
         try {
             if (downloadStates[key] != true) {
                 Log.d(TAG, "Downloading model for $sourceLang -> $targetLang")
-                withTimeoutOrNull(MODEL_DOWNLOAD_TIMEOUT_MS) {
+                val result = withTimeoutOrNull(MODEL_DOWNLOAD_TIMEOUT_MS) {
                     translator.downloadModelIfNeeded().await()
+                }
+                if (result == null) {
+                    Log.w(TAG, "Model download timed out for $sourceLang -> $targetLang")
+                    return@withContext null
                 }
                 downloadStates[key] = true
                 Log.d(TAG, "Model downloaded for $sourceLang -> $targetLang")

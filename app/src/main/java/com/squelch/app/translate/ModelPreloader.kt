@@ -4,6 +4,7 @@ import android.util.Log
 import com.google.mlkit.nl.translate.TranslateLanguage
 import com.google.mlkit.nl.translate.Translation
 import com.google.mlkit.nl.translate.TranslatorOptions
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,7 +21,7 @@ class ModelPreloader @Inject constructor() {
 
     companion object {
         private const val TAG = "ModelPreloader"
-        private const val PER_MODEL_TIMEOUT_MS = 30_000L
+        private const val PER_MODEL_TIMEOUT_MS = 90_000L
 
         val SUPPORTED_LANGUAGES = listOf(
             "af", "ar", "be", "bg", "bn", "ca", "cs", "cy", "da", "de", "el", "en",
@@ -55,23 +56,31 @@ class ModelPreloader @Inject constructor() {
         private set
 
     private var currentIndex = 0
+    private var retryOnly = false
 
     suspend fun preloadAllModels(onProgress: ((Float, Int, Int) -> Unit)? = null) {
         if (_isDownloading.value) return
         _isDownloading.value = true
         _isPaused.value = false
-        _failedModels.value = emptyList()
-        downloadedModels = 0
-        currentIndex = 0
 
-        totalModels = SUPPORTED_LANGUAGES.size
+        val languagesToDownload = if (retryOnly && _failedModels.value.isNotEmpty()) {
+            _failedModels.value.toList()
+        } else {
+            _failedModels.value = emptyList()
+            downloadedModels = 0
+            currentIndex = 0
+            SUPPORTED_LANGUAGES.toList()
+        }
+        retryOnly = false
+
+        totalModels = languagesToDownload.size
         _statusText.value = "Downloading translation models..."
         Log.d(TAG, "Preloading $totalModels language models")
 
         val failed = mutableListOf<String>()
 
         withContext(Dispatchers.IO) {
-            while (currentIndex < SUPPORTED_LANGUAGES.size) {
+            for (code in languagesToDownload) {
                 ensureActive()
 
                 while (_isPaused.value) {
@@ -79,11 +88,8 @@ class ModelPreloader @Inject constructor() {
                     kotlinx.coroutines.delay(500)
                 }
 
-                val code = SUPPORTED_LANGUAGES[currentIndex]
-
                 if (code == "en") {
                     downloadedModels++
-                    currentIndex++
                     _progress.value = downloadedModels.toFloat() / totalModels
                     continue
                 }
@@ -96,7 +102,6 @@ class ModelPreloader @Inject constructor() {
                     if (lang == null) {
                         Log.w(TAG, "Unknown language code: $code, skipping")
                         downloadedModels++
-                        currentIndex++
                         _progress.value = downloadedModels.toFloat() / totalModels
                         continue
                     }
@@ -119,6 +124,8 @@ class ModelPreloader @Inject constructor() {
                     }
 
                     translator.close()
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     Log.w(TAG, "Failed to download model $code: ${e.message}")
                     failed.add(code)
@@ -126,7 +133,6 @@ class ModelPreloader @Inject constructor() {
                 }
 
                 downloadedModels++
-                currentIndex++
                 _progress.value = downloadedModels.toFloat() / totalModels
                 onProgress?.invoke(_progress.value, downloadedModels, totalModels)
             }
@@ -153,9 +159,8 @@ class ModelPreloader @Inject constructor() {
 
     fun refresh() {
         if (_isDownloading.value) return
-        currentIndex = 0
-        downloadedModels = 0
+        retryOnly = true
         _progress.value = 0f
-        _failedModels.value = emptyList()
+        downloadedModels = 0
     }
 }

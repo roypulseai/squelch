@@ -204,7 +204,9 @@ fun AppEntry(
                             .putExtra("edPubHex", edPubHex)
                             .also { activity.startForegroundService(it) }
                     }
-                    if (!modelPreloader.isDownloading.value && modelPreloader.progress.value < 1f) {
+                    if (!modelPreloader.isDownloading.value &&
+                        (modelPreloader.progress.value < 1f || modelPreloader.failedModels.value.isNotEmpty())
+                    ) {
                         scope.launch {
                             modelPreloader.preloadAllModels()
                         }

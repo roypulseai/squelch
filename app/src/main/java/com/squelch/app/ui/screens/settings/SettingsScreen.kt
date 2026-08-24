@@ -283,7 +283,7 @@ fun SettingsScreen(
                                 )
                             }
                         }
-                        if (!isDownloadingModels && modelDownloadProgress in 0.01f..0.99f) {
+                        if (!isDownloadingModels && modelFailedCount > 0) {
                             Spacer(modifier = Modifier.width(4.dp))
                             Surface(
                                 modifier = Modifier.size(32.dp),
@@ -358,23 +358,23 @@ fun SettingsScreen(
 
     if (showLanguagePicker) {
         val languageFlags = mapOf(
-            "af" to "\uD83C\uDDE6\uD83C\uDDFF", "ar" to "\uD83C\uDDF8\uD83C\uDDE6", "be" to "\uD83C\uDDE7\uD83C\uDDEE",
-            "bg" to "\uD83C\uDDE7\uD83C\uDDEC", "bn" to "\uD83C\uDDE7\uD83C\uDDE9", "ca" to "\uD83C\uDDEA\uD83C\uDDF8",
+            "af" to "\uD83C\uDDE6\uD83C\uDDFF", "ar" to "\uD83C\uDDF8\uD83C\uDDE6", "be" to "\uD83C\uDDE7\uD83C\uDDFE",
+            "bg" to "\uD83C\uDDE7\uD83C\uDDEC", "bn" to "\uD83C\uDDEE\uD83C\uDDF3", "ca" to "\uD83C\uDDEA\uD83C\uDDF8",
             "cs" to "\uD83C\uDDE8\uD83C\uDDFF", "cy" to "\uD83C\uDFF4\uD83C\uDF3D", "da" to "\uD83C\uDDE9\uD83C\uDDF0",
             "de" to "\uD83C\uDDE9\uD83C\uDDEA", "el" to "\uD83C\uDDEC\uD83C\uDDF7", "en" to "\uD83C\uDDEC\uD83C\uDDE7",
             "eo" to "\u2B50", "es" to "\uD83C\uDDEA\uD83C\uDDF8", "et" to "\uD83C\uDDEA\uD83C\uDDEA",
             "fa" to "\uD83C\uDDEE\uD83C\uDDF7", "fi" to "\uD83C\uDDEB\uD83C\uDDEE", "fr" to "\uD83C\uDDEB\uD83C\uDDF7",
-            "ga" to "\uD83C\uDDEE\uD83C\uDDEA", "gl" to "\uD83C\uDDEA\uD83C\uDDF8", "gu" to "\uD83C\uDDEC\uD83C\uDDF9",
+            "ga" to "\uD83C\uDDEE\uD83C\uDDEA", "gl" to "\uD83C\uDDEA\uD83C\uDDF8", "gu" to "\uD83C\uDDEE\uD83C\uDDF3",
             "he" to "\uD83C\uDDF1\uD83C\uDDEE", "hi" to "\uD83C\uDDEE\uD83C\uDDF3", "hr" to "\uD83C\uDDED\uD83C\uDDF7",
-            "ht" to "\uD83C\uDDF9\uD83C\uDDF4", "hu" to "\uD83C\uDDED\uD83C\uDDFA", "id" to "\uD83C\uDDEE\uD83C\uDDE9",
-            "is" to "\uD83C\uDDF8\uD83C\uDDF2", "it" to "\uD83C\uDDEE\uD83C\uDDF9", "ja" to "\uD83C\uDDEF\uD83C\uDDF5",
+            "ht" to "\uD83C\uDDED\uD83C\uDDF9", "hu" to "\uD83C\uDDED\uD83C\uDDFA", "id" to "\uD83C\uDDEE\uD83C\uDDE9",
+            "is" to "\uD83C\uDDEE\uD83C\uDDF8", "it" to "\uD83C\uDDEE\uD83C\uDDF9", "ja" to "\uD83C\uDDEF\uD83C\uDDF5",
             "ka" to "\uD83C\uDDEC\uD83C\uDDEA", "kn" to "\uD83C\uDDEE\uD83C\uDDF3", "ko" to "\uD83C\uDDF0\uD83C\uDDF7",
             "lt" to "\uD83C\uDDF1\uD83C\uDDF9", "lv" to "\uD83C\uDDF1\uD83C\uDDFB", "mk" to "\uD83C\uDDF2\uD83C\uDDF0",
             "mr" to "\uD83C\uDDEE\uD83C\uDDF3", "ms" to "\uD83C\uDDF2\uD83C\uDDFE", "mt" to "\uD83C\uDDF2\uD83C\uDDF9",
             "nl" to "\uD83C\uDDF3\uD83C\uDDF1", "no" to "\uD83C\uDDF3\uD83C\uDDF4", "pl" to "\uD83C\uDDF5\uD83C\uDDF1",
-            "pt" to "\uD83C\uDDE6\uD83C\uDDF7", "ro" to "\uD83C\uDDF7\uD83C\uDDF4", "ru" to "\uD83C\uDDF7\uD83C\uDDFA",
-            "sk" to "\uD83C\uDDF0\uD83C\uDDF0", "sl" to "\uD83C\uDDF8\uD83C\uDDEE", "sq" to "\uD83C\uDDE6\uD83C\uDDF1",
-            "sv" to "\uD83C\uDDF8\uD83C\uDDEA", "sw" to "\uD83C\uDDF3\uD83C\uDDFF", "ta" to "\uD83C\uDDEE\uD83C\uDDF3",
+            "pt" to "\uD83C\uDDF5\uD83C\uDDF9", "ro" to "\uD83C\uDDF7\uD83C\uDDF4", "ru" to "\uD83C\uDDF7\uD83C\uDDFA",
+            "sk" to "\uD83C\uDDF8\uD83C\uDDF0", "sl" to "\uD83C\uDDF8\uD83C\uDDEE", "sq" to "\uD83C\uDDE6\uD83C\uDDF1",
+            "sv" to "\uD83C\uDDF8\uD83C\uDDEA", "sw" to "\uD83C\uDDF0\uD83C\uDDEA", "ta" to "\uD83C\uDDEE\uD83C\uDDF3",
             "te" to "\uD83C\uDDEE\uD83C\uDDF3", "th" to "\uD83C\uDDF9\uD83C\uDDED", "tl" to "\uD83C\uDDF5\uD83C\uDDED",
             "tr" to "\uD83C\uDDF9\uD83C\uDDF7", "uk" to "\uD83C\uDDFA\uD83C\uDDE6", "ur" to "\uD83C\uDDF5\uD83C\uDDF0",
             "vi" to "\uD83C\uDDFB\uD83C\uDDF3", "zh" to "\uD83C\uDDE8\uD83C\uDDF3"
