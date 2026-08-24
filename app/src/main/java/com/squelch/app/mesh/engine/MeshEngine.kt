@@ -306,11 +306,18 @@ class MeshEngine(
             .filter { now - it.value > PEER_TIMEOUT_MS }
             .map { it.key }
         if (stalePeers.isNotEmpty()) {
-            val current = _onlinePeers.value.toMutableSet()
-            current.removeAll(stalePeers.toSet())
-            _onlinePeers.value = current
+            val staleSet = stalePeers.toSet()
+            val currentOnline = _onlinePeers.value.toMutableSet()
+            currentOnline.removeAll(staleSet)
+            _onlinePeers.value = currentOnline
+
+            val currentPeers = _peers.value.toMutableSet()
+            currentPeers.removeAll(staleSet)
+            _peers.value = currentPeers
+
             for (peer in stalePeers) {
                 peerLastSeen.remove(peer)
+                sessions.remove(peer)
             }
         }
     }

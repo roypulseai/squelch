@@ -44,6 +44,11 @@ class MeshEngineManager @Inject constructor(
     @Synchronized
     fun getOrCreate(): MeshEngine? {
         engine?.let { if (it.running) return it }
+        try {
+            engine?.stop()
+        } catch (_: Exception) {}
+        scope?.cancel()
+        scope = null
         return try {
             val googleUid = authRepository.signedIn()?.googleUid ?: return null
             val identity = Identity.fromGoogleUid(googleUid)

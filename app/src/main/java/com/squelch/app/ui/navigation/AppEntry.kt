@@ -208,7 +208,7 @@ fun AppEntry(
                         (modelPreloader.progress.value < 1f || modelPreloader.failedModels.value.isNotEmpty())
                     ) {
                         scope.launch {
-                            modelPreloader.preloadAllModels()
+                            modelPreloader.preloadAllModels(preferredLang)
                         }
                     }
                 }
@@ -848,7 +848,7 @@ fun AppEntry(
                         },
                         onRefreshModelDownload = {
                             modelPreloader.refresh()
-                            scope.launch { modelPreloader.preloadAllModels() }
+                            scope.launch { modelPreloader.preloadAllModels(preferredLang) }
                         }
                     )
                 }
