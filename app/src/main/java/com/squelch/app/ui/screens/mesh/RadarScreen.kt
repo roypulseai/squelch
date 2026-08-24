@@ -1,5 +1,10 @@
 package com.squelch.app.ui.screens.mesh
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -47,6 +52,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -57,11 +63,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.squelch.app.ui.theme.Accent
 import com.squelch.app.ui.theme.AccentLight
@@ -90,6 +98,29 @@ fun RadarScreen(
     val bleEnabled by viewModel.bleEnabled.collectAsState()
     val selfPubkey by viewModel.selfPubkey.collectAsState()
     val squelchUsers by viewModel.squelchUsers.collectAsState()
+
+    val context = LocalContext.current
+    val blePermissions = remember {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            arrayOf(
+                Manifest.permission.BLUETOOTH_SCAN,
+                Manifest.permission.BLUETOOTH_ADVERTISE,
+                Manifest.permission.BLUETOOTH_CONNECT
+            )
+        } else {
+            arrayOf(Manifest.permission.BLUETOOTH, Manifest.permission.ACCESS_FINE_LOCATION)
+        }
+    }
+    fun hasBlePermissions(): Boolean = blePermissions.all {
+        ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
+    }
+    val blePermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { results ->
+        if (results.values.all { it }) {
+            viewModel.toggleBle()
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -150,7 +181,13 @@ fun RadarScreen(
                 TransportCard(
                     transport = transport,
                     onToggle = if (transport.name == "Bluetooth LE") {
-                        { viewModel.toggleBle() }
+                        {
+                            if (!bleEnabled && !hasBlePermissions()) {
+                                blePermissionLauncher.launch(blePermissions)
+                            } else {
+                                viewModel.toggleBle()
+                            }
+                        }
                     } else {
                         null
                     }
