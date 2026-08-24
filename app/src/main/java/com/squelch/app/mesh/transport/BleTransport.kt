@@ -4,6 +4,8 @@ import android.annotation.SuppressLint
 import android.bluetooth.*
 import android.bluetooth.le.*
 import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.ParcelUuid
 import android.util.Log
 import com.squelch.app.util.Bytes
@@ -83,6 +85,19 @@ class BleTransport(
         md.digest(selfEdPub).copyOfRange(0, 8)
     }
 
+    private fun hasBlePermissions(): Boolean {
+        val required = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            listOf(
+                "android.permission.BLUETOOTH_SCAN",
+                "android.permission.BLUETOOTH_ADVERTISE",
+                "android.permission.BLUETOOTH_CONNECT"
+            )
+        } else {
+            listOf("android.permission.BLUETOOTH", "android.permission.ACCESS_FINE_LOCATION")
+        }
+        return required.all { context.checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED }
+    }
+
     private data class WriteJob(
         val deviceAddress: String,
         val data: ByteArray,
@@ -105,6 +120,10 @@ class BleTransport(
     )
 
     override fun start() {
+        if (!hasBlePermissions()) {
+            Log.w(TAG, "BLE permissions not granted, transport will not start")
+            return
+        }
         val btManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
         bluetoothAdapter = btManager?.adapter
         if (bluetoothAdapter?.isEnabled != true) {

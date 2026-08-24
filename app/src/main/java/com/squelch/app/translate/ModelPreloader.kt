@@ -1,7 +1,10 @@
 package com.squelch.app.translate
 
 import android.util.Log
+import com.google.mlkit.common.model.DownloadConditions
+import com.google.mlkit.common.model.RemoteModelManager
 import com.google.mlkit.nl.translate.TranslateLanguage
+import com.google.mlkit.nl.translate.TranslateRemoteModel
 import com.google.mlkit.nl.translate.Translation
 import com.google.mlkit.nl.translate.TranslatorOptions
 import kotlinx.coroutines.CancellationException
@@ -21,7 +24,7 @@ class ModelPreloader @Inject constructor() {
 
     companion object {
         private const val TAG = "ModelPreloader"
-        private const val PER_MODEL_TIMEOUT_MS = 90_000L
+        private const val PER_MODEL_TIMEOUT_MS = 120_000L
 
         val SUPPORTED_LANGUAGES = listOf(
             "af", "ar", "be", "bg", "bn", "ca", "cs", "cy", "da", "de", "el", "en",
@@ -58,6 +61,9 @@ class ModelPreloader @Inject constructor() {
     private var currentIndex = 0
     private var retryOnly = false
 
+    private val modelManager = RemoteModelManager.getInstance()
+    private val conditions = DownloadConditions.Builder().build()
+
     suspend fun preloadAllModels(preferredLang: String = "en", onProgress: ((Float, Int, Int) -> Unit)? = null) {
         if (_isDownloading.value) return
         _isDownloading.value = true
@@ -69,7 +75,7 @@ class ModelPreloader @Inject constructor() {
             _failedModels.value = emptyList()
             downloadedModels = 0
             currentIndex = 0
-            SUPPORTED_LANGUAGES.toList()
+            SUPPORTED_LANGUAGES.filter { it != "en" }.toList()
         }
         retryOnly = false
 
@@ -88,12 +94,6 @@ class ModelPreloader @Inject constructor() {
                     kotlinx.coroutines.delay(500)
                 }
 
-                if (code == "en") {
-                    downloadedModels++
-                    _progress.value = downloadedModels.toFloat() / totalModels
-                    continue
-                }
-
                 _currentModel.value = code
                 _statusText.value = "Downloading $code (${downloadedModels + 1}/${totalModels})"
 
@@ -105,29 +105,23 @@ class ModelPreloader @Inject constructor() {
                         _progress.value = downloadedModels.toFloat() / totalModels
                         continue
                     }
-                    val options = TranslatorOptions.Builder()
-                        .setSourceLanguage(lang)
-                        .setTargetLanguage(TranslateLanguage.ENGLISH)
-                        .build()
-                    val translator = Translation.getClient(options)
 
-                    val downloadResult = withTimeoutOrNull(PER_MODEL_TIMEOUT_MS) {
-                        translator.downloadModelIfNeeded().await()
+                    val model = TranslateRemoteModel.Builder(lang).build()
+                    val result = withTimeoutOrNull(PER_MODEL_TIMEOUT_MS) {
+                        modelManager.download(model, conditions).await()
                     }
 
-                    if (downloadResult == null) {
-                        Log.w(TAG, "Model download timed out for $code")
+                    if (result == null) {
+                        Log.w(TAG, "Model download timed out for $code after ${PER_MODEL_TIMEOUT_MS}ms")
                         failed.add(code)
                         _failedModels.value = failed.toList()
                     } else {
                         Log.d(TAG, "Downloaded model: $code (${downloadedModels + 1}/${totalModels})")
                     }
-
-                    translator.close()
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
-                    Log.w(TAG, "Failed to download model $code: ${e.message}")
+                    Log.w(TAG, "Failed to download model $code: ${e.message} (${e.javaClass.simpleName})")
                     failed.add(code)
                     _failedModels.value = failed.toList()
                 }
@@ -145,13 +139,9 @@ class ModelPreloader @Inject constructor() {
                 if (lang != null) {
                     _currentModel.value = "en→$preferredLang"
                     _statusText.value = "Downloading English → $preferredLang"
-                    val options = TranslatorOptions.Builder()
-                        .setSourceLanguage(TranslateLanguage.ENGLISH)
-                        .setTargetLanguage(lang)
-                        .build()
-                    val translator = Translation.getClient(options)
+                    val model = TranslateRemoteModel.Builder(lang).build()
                     val result = withTimeoutOrNull(PER_MODEL_TIMEOUT_MS) {
-                        translator.downloadModelIfNeeded().await()
+                        modelManager.download(model, conditions).await()
                     }
                     if (result == null) {
                         Log.w(TAG, "Reverse model download timed out for en→$preferredLang")
@@ -159,7 +149,6 @@ class ModelPreloader @Inject constructor() {
                     } else {
                         Log.d(TAG, "Downloaded reverse model: en→$preferredLang")
                     }
-                    translator.close()
                 }
             } catch (e: CancellationException) {
                 throw e

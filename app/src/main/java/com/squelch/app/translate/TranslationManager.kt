@@ -1,6 +1,7 @@
 package com.squelch.app.translate
 
 import android.util.Log
+import com.google.mlkit.common.model.DownloadConditions
 import com.google.mlkit.nl.languageid.LanguageIdentification
 import com.google.mlkit.nl.translate.TranslateLanguage
 import com.google.mlkit.nl.translate.Translation
@@ -23,6 +24,7 @@ object TranslationManager {
     private val languageIdentifier = LanguageIdentification.getClient()
     private val translators = ConcurrentHashMap<String, Translator>()
     private val downloadStates = ConcurrentHashMap<String, Boolean>()
+    private val downloadConditions = DownloadConditions.Builder().build()
 
     fun isLanguageSupported(langCode: String): Boolean {
         return TranslateLanguage.fromLanguageTag(langCode) != null
@@ -67,7 +69,7 @@ object TranslationManager {
             if (downloadStates[key] != true) {
                 Log.d(TAG, "Downloading model for $sourceLang -> $targetLang")
                 val result = withTimeoutOrNull(MODEL_DOWNLOAD_TIMEOUT_MS) {
-                    translator.downloadModelIfNeeded().await()
+                    translator.downloadModelIfNeeded(downloadConditions).await()
                 }
                 if (result == null) {
                     Log.w(TAG, "Model download timed out for $sourceLang -> $targetLang")
