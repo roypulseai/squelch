@@ -66,7 +66,8 @@ class RadarViewModel @Inject constructor(
         val email: String,
         val displayName: String,
         val edPub: String,
-        val isContact: Boolean
+        val isContact: Boolean,
+        val userId: String = ""
     )
 
     data class NetworkStats(
@@ -141,6 +142,7 @@ class RadarViewModel @Inject constructor(
                     val email = doc.getString("email") ?: return@mapNotNull null
                     val displayName = doc.getString("displayName") ?: email.substringBefore("@")
                     val edPub = doc.getString("edPub") ?: ""
+                    val userId = doc.getString("userId") ?: email.substringBefore("@")
                     val isContact = uid in contactUids
 
                     SquelchUser(
@@ -148,7 +150,8 @@ class RadarViewModel @Inject constructor(
                         email = email,
                         displayName = displayName,
                         edPub = edPub,
-                        isContact = isContact
+                        isContact = isContact,
+                        userId = userId
                     )
                 }
                 Log.d(TAG, "Loaded ${users.size} Squelch users from Firestore")

@@ -44,6 +44,7 @@ fun ProfileScreen(
     displayName: String = "",
     email: String = "",
     googleUid: String = "",
+    userId: String = "",
     onBack: () -> Unit = {},
     onDeleteAccount: () -> Unit = {}
 ) {
@@ -87,16 +88,25 @@ fun ProfileScreen(
             )
 
             Text(
-                text = displayName.ifEmpty { "Unknown" },
+                text = userId.ifEmpty { displayName.ifEmpty { "Unknown" } },
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold
             )
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(4.dp))
+
+            if (displayName.isNotEmpty() && displayName != userId) {
+                Text(
+                    text = displayName,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+            }
 
             Text(
                 text = email,
-                style = MaterialTheme.typography.bodyLarge,
+                style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 

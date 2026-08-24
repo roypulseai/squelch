@@ -11,5 +11,6 @@ data class ContactEntity(
     val callsign: String = "",
     val displayName: String = "",
     val lastSeen: Long = 0,
-    val email: String = ""
+    val email: String = "",
+    val userId: String = ""
 )

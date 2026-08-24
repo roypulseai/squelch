@@ -525,7 +525,7 @@ fun ConversationScreen(
                                     viewModel.sendMessage(
                                         conversationId = conversationId,
                                         recipientUid = recipientUid,
-                                        senderName = conversationName,
+                                        senderName = viewModel.getSelfName(),
                                         plaintext = inputText.trim()
                                     )
                                 }

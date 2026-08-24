@@ -145,7 +145,7 @@ fun NewChatScreen(
             } else {
                 LazyColumn(modifier = Modifier.fillMaxSize()) {
                     items(contacts, key = { it.pubkey }) { contact ->
-                        val name = contact.displayName.ifEmpty { contact.callsign }
+                        val name = contact.userId.ifEmpty { contact.displayName.ifEmpty { contact.callsign } }
 
                         Row(
                             modifier = Modifier
@@ -176,9 +176,15 @@ fun NewChatScreen(
                                         fontWeight = FontWeight.SemiBold
                                     )
                                 )
-                                if (contact.callsign.isNotEmpty() && contact.callsign != contact.displayName) {
+                                if (contact.displayName.isNotEmpty() && contact.displayName != name) {
                                     Text(
-                                        text = contact.callsign,
+                                        text = contact.displayName,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                } else if (contact.email.isNotEmpty()) {
+                                    Text(
+                                        text = contact.email,
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )

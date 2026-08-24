@@ -312,10 +312,11 @@ class MessageRelay @Inject constructor(
 
         val conversationId = senderEdPubHex
         val contact = db.contacts().get(senderEdPubHex)
-        val resolvedName = contact?.callsign?.ifEmpty { null }
+        val resolvedName = contact?.userId?.ifEmpty { null }
+            ?: contact?.callsign?.ifEmpty { null }
             ?: contact?.displayName?.ifEmpty { null }
             ?: senderName?.ifEmpty { null }
-            ?: senderEmail?.ifEmpty { null }
+            ?: senderEmail?.substringBefore("@")?.ifEmpty { null }
             ?: senderEdPubHex.take(8)
 
         Log.d(TAG, "Storing from $resolvedName: ${plaintext.take(50)}")

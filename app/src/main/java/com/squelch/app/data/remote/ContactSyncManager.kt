@@ -35,6 +35,7 @@ class ContactSyncManager @Inject constructor() {
                     put("n", c.displayName)
                     put("t", c.lastSeen)
                     put("e", c.email)
+                    put("i", c.userId)
                 })
             }
             val json = arr.toString().toByteArray(Charsets.UTF_8)
@@ -88,7 +89,8 @@ class ContactSyncManager @Inject constructor() {
                 callsign = obj.optString("c", obj.optString("callsign", "")),
                 displayName = obj.optString("n", obj.optString("displayName", "")),
                 lastSeen = obj.optLong("t", obj.optLong("lastSeen", 0)),
-                email = obj.optString("e", obj.optString("email", ""))
+                email = obj.optString("e", obj.optString("email", "")),
+                userId = obj.optString("i", obj.optString("userId", ""))
             )
         }
     }

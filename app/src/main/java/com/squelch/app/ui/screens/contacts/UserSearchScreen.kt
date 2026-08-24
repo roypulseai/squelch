@@ -28,7 +28,8 @@ data class UserSearchResult(
     val email: String,
     val displayName: String,
     val edPub: String,
-    val xPub: String
+    val xPub: String,
+    val userId: String = ""
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -48,8 +49,8 @@ fun UserSearchScreen(
     var hasSearched by remember { mutableStateOf(false) }
 
     fun performSearch() {
-        val email = searchText.trim()
-        if (email.isEmpty()) return
+        val query = searchText.trim().lowercase()
+        if (query.isEmpty()) return
 
         focusManager.clearFocus()
         isLoading = true
@@ -59,24 +60,29 @@ fun UserSearchScreen(
         scope.launch {
             try {
                 val snapshot = db.collection("users")
-                    .whereEqualTo("email", email)
                     .get()
                     .await()
 
                 results = snapshot.documents.mapNotNull { doc ->
                     val uid = doc.id
                     val userEmail = doc.getString("email") ?: return@mapNotNull null
+                    val userUserId = doc.getString("userId") ?: userEmail.substringBefore("@")
                     val displayName = doc.getString("displayName") ?: userEmail
                     val edPub = doc.getString("edPub") ?: ""
                     val xPub = doc.getString("xPub") ?: ""
-                    UserSearchResult(
-                        googleUid = uid,
-                        email = userEmail,
-                        displayName = displayName,
-                        edPub = edPub,
-                        xPub = xPub
-                    )
-                }
+                    val matchUserId = userUserId.lowercase()
+                    val matchEmail = userEmail.lowercase()
+                    if (matchUserId.startsWith(query) || matchUserId.contains(query) || matchEmail.startsWith(query)) {
+                        UserSearchResult(
+                            googleUid = uid,
+                            email = userEmail,
+                            displayName = displayName,
+                            edPub = edPub,
+                            xPub = xPub,
+                            userId = userUserId
+                        )
+                    } else null
+                }.take(20)
             } catch (e: Exception) {
                 Toast.makeText(context, "Search failed: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
             } finally {
@@ -88,7 +94,7 @@ fun UserSearchScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Find by Email") },
+                title = { Text("Find User") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(
@@ -112,19 +118,18 @@ fun UserSearchScreen(
         ) {
             Spacer(modifier = Modifier.height(12.dp))
 
-            OutlinedTextField(
-                value = searchText,
-                onValueChange = { searchText = it },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("Email address") },
-                leadingIcon = {
-                    Icon(Icons.Default.Search, contentDescription = "Search")
-                },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(
-                    imeAction = ImeAction.Search,
-                    keyboardType = androidx.compose.ui.text.input.KeyboardType.Email
-                ),
+                OutlinedTextField(
+                    value = searchText,
+                    onValueChange = { searchText = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Username or email") },
+                    leadingIcon = {
+                        Icon(Icons.Default.Search, contentDescription = "Search")
+                    },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        imeAction = ImeAction.Search
+                    ),
                 keyboardActions = KeyboardActions(
                     onSearch = { performSearch() }
                 ),
@@ -216,14 +221,20 @@ private fun SearchResultCard(
                 .padding(16.dp)
         ) {
             Text(
-                text = result.displayName,
+                text = result.userId.ifEmpty { result.displayName },
                 style = MaterialTheme.typography.titleMedium
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = result.email,
+                text = result.displayName,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = result.email,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
             )
             Spacer(modifier = Modifier.height(12.dp))
             Button(

@@ -54,7 +54,10 @@ class SessionManager(
         if (msg.senderEdPubHex == selfPubkey) return
 
         val contact = db.contacts().get(msg.senderEdPubHex)
-        val senderName = contact?.callsign ?: contact?.displayName ?: msg.senderEdPubHex.take(8)
+        val senderName = contact?.userId?.ifEmpty { null }
+            ?: contact?.callsign?.ifEmpty { null }
+            ?: contact?.displayName?.ifEmpty { null }
+            ?: msg.senderEdPubHex.take(8)
         val conversationId = msg.senderEdPubHex
         val plaintext = String(msg.plaintext, Charsets.UTF_8)
 

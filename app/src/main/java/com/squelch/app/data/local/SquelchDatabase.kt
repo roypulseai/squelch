@@ -33,7 +33,7 @@ import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
         GroupMemberEntity::class,
         BlockedEntity::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -76,6 +76,12 @@ abstract class SquelchDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `contacts` ADD COLUMN `userId` TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
         fun create(context: Context, kDb: ByteArray): SquelchDatabase {
             require(kDb.isNotEmpty()) { "K_db must not be empty" }
             System.loadLibrary("sqlcipher")
@@ -85,7 +91,7 @@ abstract class SquelchDatabase : RoomDatabase() {
                 SquelchDatabase::class.java,
                 DB_NAME
             ).openHelperFactory(factory)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                 .fallbackToDestructiveMigration()
                 .build()
         }

@@ -196,7 +196,7 @@ fun AddContactScreen(
                     modifier = Modifier.size(20.dp)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Find by Email")
+                Text("Find by Username")
             }
         }
     }

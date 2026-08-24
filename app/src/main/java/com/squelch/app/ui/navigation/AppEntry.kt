@@ -399,7 +399,7 @@ fun AppEntry(
                         onBack = { navController.popBackStack() },
                         onContactSelected = { contact ->
                             val convId = contact.pubkey
-                            val convName = contact.callsign.ifEmpty { contact.displayName }
+                            val convName = contact.userId.ifEmpty { contact.callsign.ifEmpty { contact.displayName } }
                             scope.launch {
                                 withContext(Dispatchers.IO) {
                                     val db = vaultRepository.db ?: return@withContext
@@ -585,7 +585,7 @@ fun AppEntry(
                         onNavigateToUserSearch = { navController.navigate(Screen.UserSearch.route) },
                         onContactClick = { contact ->
                             val convId = contact.pubkey
-                            val convName = contact.callsign.ifEmpty { contact.displayName }
+                            val convName = contact.userId.ifEmpty { contact.callsign.ifEmpty { contact.displayName } }
                             scope.launch {
                                 withContext(Dispatchers.IO) {
                                     val db = vaultRepository.db ?: return@withContext
@@ -620,6 +620,9 @@ fun AppEntry(
                                 withContext(Dispatchers.IO) {
                                     val db = vaultRepository.db
                                     val existing = db?.contacts()?.get(contact.edPub)
+                                    val qrUserId = contact.userId.ifEmpty {
+                                        existing?.userId ?: ""
+                                    }
                                     db?.contacts()?.upsert(
                                         ContactEntity(
                                             pubkey = contact.edPub,
@@ -628,7 +631,8 @@ fun AppEntry(
                                             callsign = contact.callsign,
                                             displayName = contact.displayName,
                                             email = existing?.email ?: "",
-                                            lastSeen = System.currentTimeMillis()
+                                            lastSeen = System.currentTimeMillis(),
+                                            userId = qrUserId
                                         )
                                     )
                                     Log.d("AppEntry", "QR contact upserted: ${contact.displayName}")
@@ -659,10 +663,11 @@ fun AppEntry(
                                             pubkey = result.edPub,
                                             firebaseUid = result.googleUid,
                                             xPub = result.xPub,
-                                            callsign = result.displayName,
+                                            callsign = result.userId.ifEmpty { result.displayName },
                                             displayName = result.displayName,
                                             email = result.email,
-                                            lastSeen = System.currentTimeMillis()
+                                            lastSeen = System.currentTimeMillis(),
+                                            userId = result.userId
                                         )
                                     )
                                     Log.d("AppEntry", "Email contact upserted: ${result.displayName}")
@@ -683,11 +688,13 @@ fun AppEntry(
                     val selfContact = remember(signed) {
                         val uid = VaultSession.googleUidOrNull() ?: ""
                         val identity = if (uid.isNotEmpty()) Identity.fromGoogleUid(uid) else null
+                        val userId = signed?.email?.substringBefore("@") ?: ""
                         QrContact(
                             edPub = identity?.edPub?.toHex() ?: uid,
                             xPub = identity?.xPub?.toHex() ?: "",
-                            callsign = signed?.displayName?.take(12) ?: "Unknown",
-                            displayName = signed?.displayName ?: signed?.email ?: ""
+                            callsign = userId.ifEmpty { signed?.displayName?.take(12) ?: "Unknown" },
+                            displayName = signed?.displayName ?: signed?.email ?: "",
+                            userId = userId
                         )
                     }
                     MyQrScreen(
@@ -823,6 +830,7 @@ fun AppEntry(
                         displayName = signed?.displayName ?: "",
                         email = signed?.email ?: "",
                         googleUid = signed?.googleUid ?: "",
+                        userId = signed?.email?.substringBefore("@") ?: "",
                         onBack = { navController.popBackStack() },
                         onDeleteAccount = {
                             vaultRepository.signOut()
@@ -857,11 +865,13 @@ private fun writeUserProfile(authRepository: AuthRepository) {
     val uid = signed.googleUid
     val db = FirebaseFirestore.getInstance()
     val identity = Identity.fromGoogleUid(uid)
+    val userId = signed.email.substringBefore("@")
     val profile = mapOf(
         "email" to signed.email,
         "displayName" to signed.displayName,
         "edPub" to identity.edPub.toHex(),
-        "xPub" to identity.xPub.toHex()
+        "xPub" to identity.xPub.toHex(),
+        "userId" to userId
     )
     db.collection("users").document(uid).set(profile, com.google.firebase.firestore.SetOptions.merge())
 }

@@ -85,7 +85,8 @@ class MeshEngineManager @Inject constructor(
                 }
 
                 val contact = db.contacts().get(incoming.senderEdPubHex)
-                val senderName = contact?.displayName?.ifEmpty { null }
+                val senderName = contact?.userId?.ifEmpty { null }
+                    ?: contact?.displayName?.ifEmpty { null }
                     ?: contact?.callsign?.ifEmpty { null }
                     ?: incoming.senderEdPubHex.take(8)
                 val conversationId = incoming.senderEdPubHex

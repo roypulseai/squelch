@@ -78,13 +78,14 @@ fun ContactsScreen(
     val sheetState = rememberModalBottomSheetState()
 
     val sorted = remember(contacts) {
-        contacts.sortedBy { it.displayName.ifEmpty { it.callsign }.lowercase() }
+        contacts.sortedBy { it.userId.ifEmpty { it.displayName.ifEmpty { it.callsign } }.lowercase() }
     }
 
     val filtered = remember(sorted, searchQuery) {
         if (searchQuery.isBlank()) sorted
         else sorted.filter {
-            it.displayName.contains(searchQuery, ignoreCase = true) ||
+            it.userId.contains(searchQuery, ignoreCase = true) ||
+                    it.displayName.contains(searchQuery, ignoreCase = true) ||
                     it.callsign.contains(searchQuery, ignoreCase = true) ||
                     it.email.contains(searchQuery, ignoreCase = true)
         }
@@ -95,7 +96,7 @@ fun ContactsScreen(
             onDismissRequest = { showDeleteDialog = null },
             icon = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
             title = { Text("Delete contact?") },
-            text = { Text("Remove ${contact.displayName.ifEmpty { contact.callsign }} from your contacts?") },
+            text = { Text("Remove ${contact.userId.ifEmpty { contact.displayName.ifEmpty { contact.callsign } }} from your contacts?") },
             confirmButton = {
                 TextButton(onClick = { onDeleteContact(contact.pubkey); showDeleteDialog = null }) {
                     Text("Delete", color = MaterialTheme.colorScheme.error)
@@ -107,7 +108,7 @@ fun ContactsScreen(
 
     showOptionsFor?.let { contact ->
         ModalBottomSheet(onDismissRequest = { showOptionsFor = null }, sheetState = sheetState) {
-            val name = contact.displayName.ifEmpty { contact.callsign }
+            val name = contact.userId.ifEmpty { contact.displayName.ifEmpty { contact.callsign } }
             Column(modifier = Modifier.padding(bottom = 24.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp),
@@ -117,7 +118,9 @@ fun ContactsScreen(
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
                         Text(name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        if (contact.email.isNotEmpty()) {
+                        if (contact.displayName.isNotEmpty() && contact.displayName != name) {
+                            Text(contact.displayName, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        } else if (contact.email.isNotEmpty()) {
                             Text(contact.email, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                     }
@@ -244,10 +247,11 @@ private fun ContactItem(
     onClick: () -> Unit,
     onLongClick: () -> Unit = {}
 ) {
-    val name = contact.displayName.ifEmpty { contact.callsign }
+    val name = contact.userId.ifEmpty { contact.displayName.ifEmpty { contact.callsign } }
     val subtitle = when {
+        contact.displayName.isNotEmpty() && contact.displayName != name -> contact.displayName
         contact.email.isNotEmpty() -> contact.email
-        contact.callsign.isNotEmpty() && contact.callsign != contact.displayName -> contact.callsign
+        contact.callsign.isNotEmpty() && contact.callsign != name -> contact.callsign
         else -> null
     }
     val isOnline = contact.lastSeen > 0 && (System.currentTimeMillis() - contact.lastSeen) < 5 * 60 * 1000

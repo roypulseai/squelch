@@ -19,6 +19,7 @@ object QrCodec {
             put("xPub", contact.xPub)
             put("cs", contact.callsign)
             put("dn", contact.displayName)
+            if (contact.userId.isNotEmpty()) put("uid", contact.userId)
         }
         val raw = json.toString()
         val encoded = Base64.getUrlEncoder().withoutPadding().encodeToString(raw.toByteArray(Charsets.UTF_8))
@@ -38,7 +39,8 @@ object QrCodec {
                 edPub = json.getString("edPub"),
                 xPub = json.getString("xPub"),
                 callsign = json.optString("cs", ""),
-                displayName = json.optString("dn", "")
+                displayName = json.optString("dn", ""),
+                userId = json.optString("uid", "")
             )
         } catch (e: Exception) {
             null

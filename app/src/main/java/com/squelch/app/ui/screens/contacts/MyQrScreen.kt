@@ -77,13 +77,13 @@ fun MyQrScreen(
             verticalArrangement = Arrangement.Center
         ) {
             Text(
-                text = selfContact.callsign,
+                text = selfContact.userId.ifEmpty { selfContact.callsign },
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = selfContact.displayName,
+                text = selfContact.displayName.ifEmpty { selfContact.userId },
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

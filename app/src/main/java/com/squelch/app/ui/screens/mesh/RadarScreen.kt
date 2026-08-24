@@ -841,7 +841,7 @@ private fun SquelchUserCard(
                     }
                 }
                 Spacer(modifier = Modifier.height(2.dp))
-                val username = user.email.substringBefore("@")
+                val username = user.userId.ifEmpty { user.email.substringBefore("@") }
                 Text(
                     text = "@$username",
                     style = MaterialTheme.typography.bodySmall,

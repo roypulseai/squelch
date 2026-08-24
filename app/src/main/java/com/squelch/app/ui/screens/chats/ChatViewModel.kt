@@ -56,7 +56,7 @@ class ChatViewModel @Inject constructor(
                 val contact = try {
                     database.contacts().get(event.peerEdPubHex)
                 } catch (_: Exception) { null }
-                val resolvedName = contact?.displayName?.ifEmpty { event.peerEdPubHex.take(8) }
+                val resolvedName = contact?.userId?.ifEmpty { contact.displayName?.ifEmpty { event.peerEdPubHex.take(8) } }
                     ?: event.peerEdPubHex.take(8)
 
                 val body = if (event.blocked) {
@@ -221,7 +221,7 @@ class ChatViewModel @Inject constructor(
                     val contact = try { db.contacts().get(senderPub) } catch (_: Exception) { null }
                     StrangerConversation(
                         senderEdPubHex = senderPub,
-                        senderName = contact?.displayName?.ifEmpty { contact.callsign }
+                        senderName = contact?.userId?.ifEmpty { contact.displayName?.ifEmpty { contact.callsign } }
                             ?: sorted.firstOrNull()?.body?.take(20)
                             ?: senderPub.take(8),
                         lastMessage = sorted.firstOrNull()?.body ?: "",
@@ -491,7 +491,7 @@ class ChatViewModel @Inject constructor(
         return try {
             kotlinx.coroutines.runBlocking {
                 val contact = db.contacts().get(pubkey)
-                contact?.displayName?.ifEmpty { contact.callsign.ifEmpty { pubkey.take(8) } }
+                contact?.userId?.ifEmpty { contact.displayName.ifEmpty { contact.callsign.ifEmpty { pubkey.take(8) } } }
                     ?: pubkey.take(8)
             }
         } catch (_: Exception) { pubkey.take(8) }
@@ -713,5 +713,10 @@ class ChatViewModel @Inject constructor(
             senderName = senderName,
             plaintext = originalBody
         )
+    }
+
+    fun getSelfName(): String {
+        val selfEmail = messageRelay.selfEmail
+        return selfEmail.substringBefore("@").ifEmpty { messageRelay.selfEdPubHex.take(8) }
     }
 }
